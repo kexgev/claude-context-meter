@@ -15,7 +15,7 @@ let watcher: vscode.FileSystemWatcher | undefined;
 const sessionFilePaths = new Map<string, string>();
 
 export function activate(context: vscode.ExtensionContext): void {
-  outputChannel = vscode.window.createOutputChannel('Claude Context Bar');
+  outputChannel = vscode.window.createOutputChannel('Claude Context Meter');
 
   statusBarMgr = new StatusBarManager(
     () => getConfig(),
@@ -23,14 +23,14 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeContextBar.hideSession', (sessionId: string) => {
+    vscode.commands.registerCommand('claudeContextMeter.hideSession', (sessionId: string) => {
       statusBarMgr.hideSession(sessionId);
     }),
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('claudeContextBar')) {
+      if (e.affectsConfiguration('claudeContextMeter')) {
         validateThresholds();
         void refresh();
       }
@@ -50,7 +50,7 @@ export function deactivate(): void {
 // ── Config ────────────────────────────────────────────────────────────────
 
 function getConfig(): Config {
-  const cfg = vscode.workspace.getConfiguration('claudeContextBar');
+  const cfg = vscode.workspace.getConfiguration('claudeContextMeter');
   return {
     contextLimit: cfg.get<number>('contextLimit', 200000),
     idleTimeout: cfg.get<number>('idleTimeout', 180),
@@ -64,7 +64,7 @@ function getConfig(): Config {
 }
 
 function validateThresholds(): void {
-  const cfg = vscode.workspace.getConfiguration('claudeContextBar');
+  const cfg = vscode.workspace.getConfiguration('claudeContextMeter');
   const w = cfg.get<number>('warningThreshold', 50);
   const d = cfg.get<number>('dangerThreshold', 75);
   if (w >= d) {

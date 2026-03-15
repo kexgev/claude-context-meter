@@ -81,7 +81,7 @@ export class StatusBarManager {
       if (!item) {
         item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         item.command = {
-          command: 'claudeContextBar.hideSession',
+          command: 'claudeContextMeter.hideSession',
           arguments: [session.id],
           title: 'Hide session',
         };
