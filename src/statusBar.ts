@@ -1,7 +1,7 @@
 // src/statusBar.ts
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import { SessionInfo, Config } from './types';
+import { SessionInfo, Config, TokenBreakdown } from './types';
 import { abbreviateName } from './sessionManager';
 
 /** 5-char Unicode progress bar. Each block = 20%. Used in status bar item text. */
@@ -28,6 +28,38 @@ function statusEmoji(pct: number, warn: number, danger: number): string {
   if (pct >= danger) { return '🔴 crit'; }
   if (pct >= warn)   { return '🟡 warn'; }
   return '🟢 safe';
+}
+
+interface PricingRow { input: number; output: number; cacheRead: number; cacheWrite: number; }
+
+const PRICING: Array<{ pattern: string; rates: PricingRow }> = [
+  { pattern: 'claude-opus-4',    rates: { input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 } },
+  { pattern: 'claude-sonnet-4',  rates: { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 } },
+  { pattern: 'claude-haiku-4',   rates: { input:  0.80, output:  4.00, cacheRead: 0.08,  cacheWrite:  1.00 } },
+  { pattern: 'opus',             rates: { input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 } },
+  { pattern: 'sonnet',           rates: { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 } },
+  { pattern: 'haiku',            rates: { input:  0.80, output:  4.00, cacheRead: 0.08,  cacheWrite:  1.00 } },
+];
+const PRICING_FALLBACK: PricingRow = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 };
+
+/** Calculate USD cost for a token breakdown given a model string. Returns 0 if no tokens. */
+export function calcCost(tokens: TokenBreakdown, model: string): number {
+  const lower = model.toLowerCase();
+  const rates = PRICING.find(p => lower.includes(p.pattern))?.rates ?? PRICING_FALLBACK;
+  return (
+    tokens.input      * rates.input      +
+    tokens.output     * rates.output     +
+    tokens.cacheRead  * rates.cacheRead  +
+    tokens.cacheWrite * rates.cacheWrite
+  ) / 1_000_000;
+}
+
+/** Format a USD cost value for display. Returns empty string if cost === 0. */
+export function fmtCost(cost: number): string {
+  if (cost === 0)    { return ''; }
+  if (cost < 0.01)   { return '~$0.00'; }
+  if (cost < 1.00)   { return `~$${cost.toFixed(2)}`; }
+  return `~$${cost.toFixed(2)}`;
 }
 
 export class StatusBarManager {
