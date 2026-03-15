@@ -1,0 +1,13 @@
+.vscode/**
+.vscode-test/**
+.superpowers/**
+.claude/**
+docs/**
+test/**
+src/**
+tsconfig.json
+.eslintrc.json
+.gitignore
+*.vsix
+node_modules/**
+package-lock.json
