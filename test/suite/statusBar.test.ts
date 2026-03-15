@@ -1,6 +1,6 @@
 // test/suite/statusBar.test.ts
 import * as assert from 'assert';
-import { calcCost, fmtCost } from '../../src/statusBar';
+import { calcCost, fmtCost, calcBurnRateFromBuffer } from '../../src/statusBar';
 import { TokenBreakdown } from '../../src/types';
 
 function td(input: number, output: number, cacheRead = 0, cacheWrite = 0): TokenBreakdown {
@@ -55,5 +55,49 @@ suite('statusBar — fmtCost', () => {
 
   test('value over $1 formatted with two decimals', () => {
     assert.strictEqual(fmtCost(1.234), '~$1.23');
+  });
+});
+
+suite('statusBar — calcBurnRateFromBuffer', () => {
+  test('returns null with fewer than 2 readings', () => {
+    assert.strictEqual(calcBurnRateFromBuffer([{ tokens: 100, time: 0 }], 200_000, 100), null);
+  });
+
+  test('returns null when elapsed < 5000ms', () => {
+    const buf = [{ tokens: 0, time: 0 }, { tokens: 1000, time: 4999 }];
+    assert.strictEqual(calcBurnRateFromBuffer(buf, 200_000, 1000), null);
+  });
+
+  test('returns null when token delta <= 0 (compaction)', () => {
+    const buf = [{ tokens: 5000, time: 0 }, { tokens: 4000, time: 10_000 }];
+    assert.strictEqual(calcBurnRateFromBuffer(buf, 200_000, 4000), null);
+  });
+
+  test('computes correct rate for 6000 tokens over 60s = 6000/min', () => {
+    const buf = [{ tokens: 0, time: 0 }, { tokens: 6000, time: 60_000 }];
+    const result = calcBurnRateFromBuffer(buf, 200_000, 6000);
+    assert.ok(result !== null);
+    assert.ok(Math.abs(result.recent - 6000) < 1, `Expected 6000/min got ${result.recent}`);
+  });
+
+  test('timeToFull: 194000 tokens remaining at 6000/min ≈ 32.3 min', () => {
+    const buf = [{ tokens: 0, time: 0 }, { tokens: 6000, time: 60_000 }];
+    const result = calcBurnRateFromBuffer(buf, 200_000, 6000);
+    assert.ok(result !== null);
+    assert.ok(Math.abs(result.timeToFull - (194_000 / 6000)) < 0.1);
+  });
+
+  test('uses oldest + newest readings (not just last 2)', () => {
+    // 5 readings spanning 120s, newest shows 12000 total delta — should give 6000/min
+    const buf = [
+      { tokens: 0,     time: 0 },
+      { tokens: 2000,  time: 20_000 },
+      { tokens: 5000,  time: 60_000 },
+      { tokens: 9000,  time: 100_000 },
+      { tokens: 12000, time: 120_000 },
+    ];
+    const result = calcBurnRateFromBuffer(buf, 200_000, 12000);
+    assert.ok(result !== null);
+    assert.ok(Math.abs(result.recent - 6000) < 1);
   });
 });
