@@ -154,7 +154,13 @@ export class StatusBarManager {
       const bar5 = buildBar5(session.pct);
       const { tokens } = session;
       const prefix = cfg.showEmoji ? `${session.emoji} ` : '';
-      item.text = `${prefix}${displayName} ${bar5} ${fmtK(tokens.total)}/${fmtK(session.tokenLimit)} (${session.pct}%) in:${fmtK(tokens.input)} out:${fmtK(tokens.output)}`;
+      const cost = calcCost(tokens, session.model);
+      const costStr = fmtCost(cost);
+      const burn = this.calcBurnRate(session.id, session.tokenLimit, tokens.total);
+      const burnStr = burn ? `🔥${(burn.recent / 1000).toFixed(1)}k/m` : '';
+      const extras = [costStr, burnStr].filter(Boolean).join(' ');
+
+      item.text = `${prefix}${displayName} ${bar5} ${fmtK(tokens.total)}/${fmtK(session.tokenLimit)} (${session.pct}%)${extras ? ' ' + extras : ''}`;
 
       item.tooltip = this.buildTooltip(session, cfg);
 
@@ -217,6 +223,24 @@ export class StatusBarManager {
     md.appendMarkdown(`${tokens.total.toLocaleString()} / ${session.tokenLimit.toLocaleString()} tokens\n\n`);
     md.appendMarkdown(`---\n\n`);
     md.appendMarkdown(`in: ${tokens.input.toLocaleString()}  ·  out: ${tokens.output.toLocaleString()}  ·  cr: ${tokens.cacheRead.toLocaleString()}  ·  cw: ${tokens.cacheWrite.toLocaleString()}\n\n`);
+
+    const burn = this.calcBurnRate(session.id, session.tokenLimit, tokens.total);
+    if (burn) {
+      md.appendMarkdown(`🔥 recent: ~${(burn.recent / 1000).toFixed(1)}k/min  ·  avg: ~${(burn.avg / 1000).toFixed(1)}k/min\n`);
+      if (burn.timeToFull > 0) {
+        md.appendMarkdown(`⏳ ~${Math.round(burn.timeToFull)} min to full\n`);
+      }
+      md.appendMarkdown(`\n`);
+    }
+
+    const cost = calcCost(tokens, session.model);
+    if (cost > 0) {
+      const rates = PRICING.find(p => session.model.toLowerCase().includes(p.pattern))?.rates ?? PRICING_FALLBACK;
+      const inputCost = (tokens.input * rates.input) / 1_000_000;
+      const outputCost = (tokens.output * rates.output) / 1_000_000;
+      md.appendMarkdown(`💰 cost: $${cost.toFixed(2)}  (in: $${inputCost.toFixed(2)} · out: $${outputCost.toFixed(2)})\n\n`);
+    }
+
     md.appendMarkdown(`*Updated ${session.lastUpdate.toLocaleTimeString()}*`);
     return md;
   }
