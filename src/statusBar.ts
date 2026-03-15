@@ -86,6 +86,7 @@ export class StatusBarManager {
   // we compare against the original dismiss-time mtime. (Stale entries are small: ~100 bytes each.)
   private readonly hiddenSessions = new Map<string, number>();
   private readonly readings = new Map<string, Array<{ tokens: number; time: number }>>();
+  private readonly notified = new Map<string, Set<'warn' | 'crit'>>();
   private lastSessions: SessionInfo[] = [];
 
   constructor(
@@ -104,6 +105,33 @@ export class StatusBarManager {
       buf.push({ tokens: session.tokens.total, time: now });
       if (buf.length > 5) { buf.shift(); } // FIFO cap at 5
       this.readings.set(session.id, buf);
+    }
+
+    // Threshold notifications — clear-then-fire ordering per spec
+    for (const session of sessions) {
+      const isHidden = this.hiddenSessions.has(session.id);
+      if (isHidden) { continue; }
+
+      // Step 1: clear state if pct dropped below warning (e.g. after /compact)
+      if (session.pct < cfg.warningThreshold) {
+        this.notified.delete(session.id);
+        continue;
+      }
+
+      // Step 2: fire notifications
+      const fired = this.notified.get(session.id) ?? new Set<'warn' | 'crit'>();
+      const msg = (pct: number) =>
+        `Claude Context Meter: ${session.projectName} is at ${pct}% context (${session.tokens.total.toLocaleString()}/${session.tokenLimit.toLocaleString()} tokens)`;
+
+      if (session.pct >= cfg.dangerThreshold && !fired.has('crit')) {
+        void vscode.window.showErrorMessage(msg(session.pct));
+        fired.add('crit');
+        this.notified.set(session.id, fired);
+      } else if (session.pct >= cfg.warningThreshold && !fired.has('warn')) {
+        void vscode.window.showWarningMessage(msg(session.pct));
+        fired.add('warn');
+        this.notified.set(session.id, fired);
+      }
     }
 
     const activeIds = new Set(sessions.map(s => s.id));
@@ -207,6 +235,7 @@ export class StatusBarManager {
     for (const item of this.items.values()) { item.dispose(); }
     this.items.clear();
     this.readings.clear();
+    this.notified.clear();
     this.lastSessions = [];
   }
 
