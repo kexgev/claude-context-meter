@@ -56,9 +56,8 @@ export function calcCost(tokens: TokenBreakdown, model: string): number {
 
 /** Format a USD cost value for display. Returns empty string if cost === 0. */
 export function fmtCost(cost: number): string {
-  if (cost === 0)    { return ''; }
-  if (cost < 0.01)   { return '~$0.00'; }
-  if (cost < 1.00)   { return `~$${cost.toFixed(2)}`; }
+  if (cost === 0)  { return ''; }
+  if (cost < 0.01) { return '~$0.00'; }
   return `~$${cost.toFixed(2)}`;
 }
 
