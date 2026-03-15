@@ -53,6 +53,11 @@
         "command": "claudeContextMeter.hideSession",
         "title": "Hide Claude Session",
         "category": "Claude Context Meter"
+      },
+      {
+        "command": "claudeContextMeter.copyStats",
+        "title": "Copy Context Stats",
+        "category": "Claude Context Meter"
       }
     ]
   },
