@@ -125,6 +125,7 @@ export class StatusBarManager {
 
       if (session.pct >= cfg.dangerThreshold && !fired.has('crit')) {
         void vscode.window.showErrorMessage(msg(session.pct));
+        fired.add('warn'); // also mark warn fired so a later pct drop doesn't spuriously re-fire it
         fired.add('crit');
         this.notified.set(session.id, fired);
       } else if (session.pct >= cfg.warningThreshold && !fired.has('warn')) {
