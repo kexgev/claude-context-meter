@@ -12,37 +12,37 @@
   "icon": "media/icon.png",
   "contributes": {
     "configuration": {
-      "title": "Claude Context Bar",
+      "title": "Claude Context Meter",
       "properties": {
-        "claudeContextBar.contextLimit": {
+        "claudeContextMeter.contextLimit": {
           "type": "number", "default": 200000, "minimum": 1000, "maximum": 2000000,
           "description": "Fallback token limit when model is not detected"
         },
-        "claudeContextBar.idleTimeout": {
+        "claudeContextMeter.idleTimeout": {
           "type": "number", "default": 180, "minimum": 10, "maximum": 600,
           "description": "Seconds of inactivity before hiding a session"
         },
-        "claudeContextBar.warningThreshold": {
+        "claudeContextMeter.warningThreshold": {
           "type": "number", "default": 50, "minimum": 1, "maximum": 99,
           "description": "Percentage at which status bar turns yellow"
         },
-        "claudeContextBar.dangerThreshold": {
+        "claudeContextMeter.dangerThreshold": {
           "type": "number", "default": 75, "minimum": 2, "maximum": 100,
           "description": "Percentage at which status bar turns red"
         },
-        "claudeContextBar.compactMode": {
+        "claudeContextMeter.compactMode": {
           "type": "boolean", "default": false,
           "description": "Abbreviate project names in status bar"
         },
-        "claudeContextBar.showEmoji": {
+        "claudeContextMeter.showEmoji": {
           "type": "boolean", "default": true,
           "description": "Show project emoji in status bar"
         },
-        "claudeContextBar.autoColor": {
+        "claudeContextMeter.autoColor": {
           "type": "boolean", "default": true,
           "description": "Auto-assign pastel colors per project"
         },
-        "claudeContextBar.shortNames": {
+        "claudeContextMeter.shortNames": {
           "type": "object", "default": {},
           "description": "Custom name overrides: { \"projectName\": \"abbr\" }"
         }
@@ -50,9 +50,9 @@
     },
     "commands": [
       {
-        "command": "claudeContextBar.hideSession",
+        "command": "claudeContextMeter.hideSession",
         "title": "Hide Claude Session",
-        "category": "Claude Context Bar"
+        "category": "Claude Context Meter"
       }
     ]
   },

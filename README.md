@@ -66,14 +66,14 @@ code --install-extension claude-context-meter-1.0.0.vsix
 
 | Setting | Default | Description |
 |---|---|---|
-| `claudeContextBar.contextLimit` | `200000` | Fallback token limit when model is not auto-detected |
-| `claudeContextBar.idleTimeout` | `180` | Seconds of inactivity before hiding a session |
-| `claudeContextBar.warningThreshold` | `50` | % at which the bar turns yellow |
-| `claudeContextBar.dangerThreshold` | `75` | % at which the bar turns red |
-| `claudeContextBar.compactMode` | `false` | Abbreviate long project names (e.g. `my-cool-project` → `MCP`) |
-| `claudeContextBar.showEmoji` | `true` | Show project emoji prefix |
-| `claudeContextBar.autoColor` | `true` | Auto-assign a unique pastel color per project |
-| `claudeContextBar.shortNames` | `{}` | Custom name overrides e.g. `{ "my-project": "MP" }` |
+| `claudeContextMeter.contextLimit` | `200000` | Fallback token limit when model is not auto-detected |
+| `claudeContextMeter.idleTimeout` | `180` | Seconds of inactivity before hiding a session |
+| `claudeContextMeter.warningThreshold` | `50` | % at which the bar turns yellow |
+| `claudeContextMeter.dangerThreshold` | `75` | % at which the bar turns red |
+| `claudeContextMeter.compactMode` | `false` | Abbreviate long project names (e.g. `my-cool-project` → `MCP`) |
+| `claudeContextMeter.showEmoji` | `true` | Show project emoji prefix |
+| `claudeContextMeter.autoColor` | `true` | Auto-assign a unique pastel color per project |
+| `claudeContextMeter.shortNames` | `{}` | Custom name overrides e.g. `{ "my-project": "MP" }` |
 
 ## License
 
