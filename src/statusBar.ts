@@ -61,12 +61,32 @@ export function fmtCost(cost: number): string {
   return `~$${cost.toFixed(2)}`;
 }
 
+/** Pure burn rate calculation from a readings buffer. Exported for testing and copy command. */
+export function calcBurnRateFromBuffer(
+  buf: Array<{ tokens: number; time: number }>,
+  tokenLimit: number,
+  currentTokens: number,
+): { recent: number; avg: number; timeToFull: number } | null {
+  if (buf.length < 2) { return null; }
+  const oldest = buf[0];
+  const newest = buf[buf.length - 1];
+  const elapsed = newest.time - oldest.time;
+  if (elapsed < 5_000) { return null; }
+  const delta = newest.tokens - oldest.tokens;
+  if (delta <= 0) { return null; }
+  const rate = delta / elapsed * 60_000;
+  const timeToFull = rate > 0 ? (tokenLimit - currentTokens) / rate : 0;
+  return { recent: rate, avg: rate, timeToFull };
+}
+
 export class StatusBarManager {
   private readonly items = new Map<string, vscode.StatusBarItem>();
   // Maps sessionId → file mtime at dismiss time. Entries are retained even after idle sessions
   // disappear from sessions[]; this is intentional — if a session reactivates with the same ID,
   // we compare against the original dismiss-time mtime. (Stale entries are small: ~100 bytes each.)
   private readonly hiddenSessions = new Map<string, number>();
+  private readonly readings = new Map<string, Array<{ tokens: number; time: number }>>();
+  private lastSessions: SessionInfo[] = [];
 
   constructor(
     private readonly getConfig: () => Config,
@@ -75,6 +95,17 @@ export class StatusBarManager {
 
   update(sessions: SessionInfo[]): void {
     const cfg = this.getConfig();
+    this.lastSessions = sessions;
+
+    // Append to ring buffer for each session
+    const now = Date.now();
+    for (const session of sessions) {
+      const buf = this.readings.get(session.id) ?? [];
+      buf.push({ tokens: session.tokens.total, time: now });
+      if (buf.length > 5) { buf.shift(); } // FIFO cap at 5
+      this.readings.set(session.id, buf);
+    }
+
     const activeIds = new Set(sessions.map(s => s.id));
 
     // Dispose items for sessions no longer present
@@ -157,9 +188,20 @@ export class StatusBarManager {
     }
   }
 
+  calcBurnRate(sessionId: string, tokenLimit: number, currentTokens: number): { recent: number; avg: number; timeToFull: number } | null {
+    const buf = this.readings.get(sessionId) ?? [];
+    return calcBurnRateFromBuffer(buf, tokenLimit, currentTokens);
+  }
+
+  getSessions(): SessionInfo[] {
+    return this.lastSessions;
+  }
+
   dispose(): void {
     for (const item of this.items.values()) { item.dispose(); }
     this.items.clear();
+    this.readings.clear();
+    this.lastSessions = [];
   }
 
   private buildTooltip(session: SessionInfo, cfg: Config): vscode.MarkdownString {
