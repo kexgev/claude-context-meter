@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { Config } from './types';
 import { scanSessions } from './sessionManager';
-import { StatusBarManager } from './statusBar';
+import { StatusBarManager, calcCost, fmtCost } from './statusBar';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarMgr: StatusBarManager;
@@ -25,6 +25,29 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('claudeContextMeter.hideSession', (sessionId: string) => {
       statusBarMgr.hideSession(sessionId);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeContextMeter.copyStats', async () => {
+      const sessions = statusBarMgr.getSessions();
+      if (sessions.length === 0) {
+        void vscode.window.showInformationMessage('No active Claude sessions.');
+        return;
+      }
+
+      const header = '| Project | Model | Tokens | Limit | % | Cost | Rate |\n|---|---|---|---|---|---|---|';
+      const rows = sessions.map(s => {
+        const cost = calcCost(s.tokens, s.model);
+        const costStr = cost > 0 ? fmtCost(cost).replace('~', '') : '—';
+        const burn = statusBarMgr.calcBurnRate(s.id, s.tokenLimit, s.tokens.total);
+        const rateStr = burn ? `${(burn.recent / 1000).toFixed(1)}k/min` : '—';
+        return `| ${s.projectName} | ${s.model || 'unknown'} | ${s.tokens.total.toLocaleString()} | ${s.tokenLimit.toLocaleString()} | ${s.pct}% | ${costStr} | ${rateStr} |`;
+      });
+
+      const table = [header, ...rows].join('\n');
+      await vscode.env.clipboard.writeText(table);
+      void vscode.window.showInformationMessage('Context stats copied!');
     }),
   );
 
