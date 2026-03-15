@@ -46,8 +46,12 @@ export function activate(context: vscode.ExtensionContext): void {
       });
 
       const table = [header, ...rows].join('\n');
-      await vscode.env.clipboard.writeText(table);
-      void vscode.window.showInformationMessage('Context stats copied!');
+      try {
+        await vscode.env.clipboard.writeText(table);
+        void vscode.window.showInformationMessage('Context stats copied!');
+      } catch {
+        void vscode.window.showErrorMessage('Failed to copy stats to clipboard.');
+      }
     }),
   );
 
