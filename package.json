@@ -4,7 +4,7 @@
   "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates, no polling",
   "version": "1.0.0",
   "publisher": "asjalik",
-  "repository": { "type": "git", "url": "https://github.com/asjalik/claude-context-bar" },
+  "repository": { "type": "git", "url": "https://github.com/asjalik/claude-context-meter" },
   "engines": { "vscode": "^1.74.0" },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
