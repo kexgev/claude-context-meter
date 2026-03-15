@@ -39,22 +39,22 @@ Token limit is auto-detected from the model name (Sonnet 4.5/4.6 → 1M tokens, 
 
 ### From VSIX
 
-1. Download the latest `.vsix` from [Releases](https://github.com/asjalik/claude-context-meter/releases)
+1. Download the latest `.vsix` from [Releases](https://github.com/kexgev/claude-context-meter/releases)
 2. In VS Code: `Extensions` → `···` → `Install from VSIX`
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-1.0.0.vsix
+code --install-extension claude-context-meter-1.1.0.vsix
 ```
 
 ### Build from source
 
 ```bash
-git clone https://github.com/asjalik/claude-context-meter.git
+git clone https://github.com/kexgev/claude-context-meter.git
 cd claude-context-bar
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-1.0.0.vsix
+code --install-extension claude-context-meter-1.1.0.vsix
 ```
 
 ## Requirements
