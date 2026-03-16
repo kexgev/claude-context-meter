@@ -23,9 +23,34 @@ const PALETTE = [
 
 // ── Exported helpers (also tested directly) ───────────────────────────────
 
+/**
+ * Known Claude model context windows.
+ * Patterns are tested against the lowercase model string.
+ * First match wins — order from most specific to least.
+ */
+const MODEL_CONTEXT_LIMITS: { pattern: RegExp; limit: number }[] = [
+  // Claude 4.6 family (1M context)
+  { pattern: /claude-opus-4-6/,          limit: 1_000_000 },
+  { pattern: /claude-sonnet-4-6/,        limit: 1_000_000 },
+  // Claude 4.5 family
+  { pattern: /claude-sonnet-4-5/,        limit: 1_000_000 },
+  { pattern: /claude-haiku-4-5/,         limit:   200_000 },
+  // Claude 4 family
+  { pattern: /claude-opus-4/,            limit:   200_000 },
+  { pattern: /claude-sonnet-4/,          limit:   200_000 },
+  // Claude 3.5 family
+  { pattern: /claude-3[._-]5-sonnet/,    limit:   200_000 },
+  { pattern: /claude-3[._-]5-haiku/,     limit:   200_000 },
+  // Claude 3 family
+  { pattern: /claude-3-opus/,            limit:   200_000 },
+  { pattern: /claude-3-sonnet/,          limit:   200_000 },
+  { pattern: /claude-3-haiku/,           limit:   200_000 },
+];
+
 export function detectTokenLimit(model: string, contextLimit: number): number {
-  if (model.toLowerCase().includes('sonnet') && /4[-.]5|4[-.]6/.test(model)) {
-    return 1_000_000;
+  const lower = model.toLowerCase();
+  for (const { pattern, limit } of MODEL_CONTEXT_LIMITS) {
+    if (pattern.test(lower)) { return limit; }
   }
   return contextLimit;
 }
