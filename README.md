@@ -33,7 +33,14 @@ Updated 9:42:15 PM
 
 Claude Code writes session logs as `.jsonl` files under `~/.claude/projects/`. This extension watches that directory with VS Code's file system watcher — no polling interval, no delay. The moment Claude writes a response, the meter updates.
 
-Token limit is auto-detected from the model name (Sonnet 4.5/4.6 → 1M tokens, everything else uses the `contextLimit` setting).
+Token limit is auto-detected from the model name:
+
+| Model | Context |
+|---|---|
+| Opus 4.6, Sonnet 4.5/4.6 | 1M tokens |
+| Opus 4, Sonnet 4, Haiku 4.5, Claude 3.x family | 200k tokens |
+
+Unrecognized models fall back to the `contextLimit` setting.
 
 ## Install
 
