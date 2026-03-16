@@ -1,7 +1,7 @@
 {
   "name": "claude-context-meter",
   "displayName": "Claude Context Meter",
-  "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates, no polling",
+  "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates",
   "version": "1.2.0",
   "publisher": "kexgev",
   "repository": { "type": "git", "url": "https://github.com/kexgev/claude-context-meter" },
