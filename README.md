@@ -51,17 +51,17 @@ Unrecognized models fall back to the `contextLimit` setting.
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-1.1.0.vsix
+code --install-extension claude-context-meter-1.2.0.vsix
 ```
 
 ### Build from source
 
 ```bash
 git clone https://github.com/kexgev/claude-context-meter.git
-cd claude-context-bar
+cd claude-context-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-1.1.0.vsix
+code --install-extension claude-context-meter-1.2.0.vsix
 ```
 
 ## Requirements

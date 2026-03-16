@@ -4,10 +4,19 @@
   "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates",
   "version": "1.2.0",
   "publisher": "kexgev",
-  "repository": { "type": "git", "url": "https://github.com/kexgev/claude-context-meter" },
-  "engines": { "vscode": "^1.74.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kexgev/claude-context-meter"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/src/extension.js",
   "icon": "media/icon.png",
   "contributes": {
@@ -15,35 +24,51 @@
       "title": "Claude Context Meter",
       "properties": {
         "claudeContextMeter.contextLimit": {
-          "type": "number", "default": 200000, "minimum": 1000, "maximum": 2000000,
+          "type": "number",
+          "default": 200000,
+          "minimum": 1000,
+          "maximum": 2000000,
           "description": "Fallback token limit when model is not detected"
         },
         "claudeContextMeter.idleTimeout": {
-          "type": "number", "default": 180, "minimum": 10, "maximum": 600,
+          "type": "number",
+          "default": 180,
+          "minimum": 10,
+          "maximum": 600,
           "description": "Seconds of inactivity before hiding a session"
         },
         "claudeContextMeter.warningThreshold": {
-          "type": "number", "default": 50, "minimum": 1, "maximum": 99,
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 99,
           "description": "Percentage at which status bar turns yellow"
         },
         "claudeContextMeter.dangerThreshold": {
-          "type": "number", "default": 75, "minimum": 2, "maximum": 100,
+          "type": "number",
+          "default": 75,
+          "minimum": 2,
+          "maximum": 100,
           "description": "Percentage at which status bar turns red"
         },
         "claudeContextMeter.compactMode": {
-          "type": "boolean", "default": false,
+          "type": "boolean",
+          "default": false,
           "description": "Abbreviate project names in status bar"
         },
         "claudeContextMeter.showEmoji": {
-          "type": "boolean", "default": true,
+          "type": "boolean",
+          "default": true,
           "description": "Show project emoji in status bar"
         },
         "claudeContextMeter.autoColor": {
-          "type": "boolean", "default": true,
+          "type": "boolean",
+          "default": true,
           "description": "Auto-assign pastel colors per project"
         },
         "claudeContextMeter.shortNames": {
-          "type": "object", "default": {},
+          "type": "object",
+          "default": {},
           "description": "Custom name overrides: { \"projectName\": \"abbr\" }"
         }
       }
@@ -70,17 +95,19 @@
     "lint": "eslint src --ext .ts",
     "vsce:package": "vsce package"
   },
+  "overrides": {
+    "serialize-javascript": "^7.0.4"
+  },
   "devDependencies": {
     "@types/mocha": "^10.0.0",
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.74.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
     "@vscode/test-electron": "^2.3.0",
+    "@vscode/vsce": "^2.0.0",
     "eslint": "^8.0.0",
-    "mocha": "^10.0.0",
-    "typescript": "^5.0.0",
-    "@vscode/vsce": "^2.0.0"
-  },
-  "dependencies": {}
+    "mocha": "^11.3.0",
+    "typescript": "^5.0.0"
+  }
 }
