@@ -37,12 +37,13 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const header = '| Project | Model | Tokens | Limit | % | Cost | Rate |\n|---|---|---|---|---|---|---|';
+      const esc = (s: string) => s.replace(/\|/g, '\\|'); // prevent markdown table injection
       const rows = sessions.map(s => {
         const cost = calcCost(s.tokens, s.model);
         const costStr = cost > 0 ? fmtCost(cost).replace('~', '') : '—';
         const burn = statusBarMgr.calcBurnRate(s.id, s.tokenLimit, s.tokens.total);
         const rateStr = burn ? `${(burn.recent / 1000).toFixed(1)}k/min` : '—';
-        return `| ${s.projectName} | ${s.model || 'unknown'} | ${s.tokens.total.toLocaleString()} | ${s.tokenLimit.toLocaleString()} | ${s.pct}% | ${costStr} | ${rateStr} |`;
+        return `| ${esc(s.projectName)} | ${esc(s.model || 'unknown')} | ${s.tokens.total.toLocaleString()} | ${s.tokenLimit.toLocaleString()} | ${s.pct}% | ${costStr} | ${rateStr} |`;
       });
 
       const table = [header, ...rows].join('\n');

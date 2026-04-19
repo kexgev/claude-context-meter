@@ -80,10 +80,27 @@ export function parseLatestTokenUsage(lines: string[]): ParsedLatest | null {
   return null;
 }
 
-/** Read a file and return its lines. Returns [] on read error. */
+/**
+ * Read the tail of a file and return its lines. Returns [] on read error.
+ * Only the last TAIL_BYTES are read — the parser scans from the end anyway,
+ * and this prevents large JSONL files from blocking the extension host.
+ */
+const TAIL_BYTES = 512 * 1024; // 512 KB
+
 export function readFileLines(filePath: string): string[] {
   try {
-    return fs.readFileSync(filePath, 'utf-8').split(/\r?\n/);
+    const stat = fs.statSync(filePath);
+    const size = stat.size;
+    if (size === 0) { return []; }
+    const readSize = Math.min(TAIL_BYTES, size);
+    const buf = Buffer.alloc(readSize);
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      fs.readSync(fd, buf, 0, readSize, Math.max(0, size - readSize));
+    } finally {
+      fs.closeSync(fd);
+    }
+    return buf.toString('utf-8').split(/\r?\n/);
   } catch {
     return [];
   }

@@ -23,6 +23,11 @@ function fmtK(n: number): string {
   return String(n);
 }
 
+/** Escape markdown special characters to prevent injection in tooltips. */
+function escapeMd(s: string): string {
+  return s.replace(/[\\`*_[\]()#+\-.!|]/g, '\\$&');
+}
+
 /** Status indicator emoji+label for tooltip. Always shown regardless of cfg.showEmoji. */
 function statusEmoji(pct: number, warn: number, danger: number): string {
   if (pct >= danger) { return '🔴 crit'; }
@@ -247,8 +252,8 @@ export class StatusBarManager {
     const bar20 = buildBar20(session.pct);
     const status = statusEmoji(session.pct, cfg.warningThreshold, cfg.dangerThreshold);
 
-    md.appendMarkdown(`**${session.projectName}**\n\n`);
-    md.appendMarkdown(`\`${session.model || 'unknown'}\`  ·  ${status} · ${session.pct}%\n\n`);
+    md.appendMarkdown(`**${escapeMd(session.projectName)}**\n\n`);
+    md.appendMarkdown(`\`${escapeMd(session.model || 'unknown')}\`  ·  ${status} · ${session.pct}%\n\n`);
     md.appendMarkdown(`${bar20}  ${session.pct}%\n`);
     md.appendMarkdown(`${tokens.total.toLocaleString()} / ${session.tokenLimit.toLocaleString()} tokens\n\n`);
     md.appendMarkdown(`---\n\n`);
