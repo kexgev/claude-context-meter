@@ -29,9 +29,12 @@ const PALETTE = [
  * First match wins — order from most specific to least.
  */
 const MODEL_CONTEXT_LIMITS: { pattern: RegExp; limit: number }[] = [
-  // Claude 4.6 family (1M context)
+  // Claude 4.7 family
+  { pattern: /claude-opus-4-7/,          limit: 1_000_000 },
+  { pattern: /claude-sonnet-4-7/,        limit:   200_000 },
+  // Claude 4.6 family
   { pattern: /claude-opus-4-6/,          limit: 1_000_000 },
-  { pattern: /claude-sonnet-4-6/,        limit: 1_000_000 },
+  { pattern: /claude-sonnet-4-6/,        limit:   200_000 },
   // Claude 4.5 family
   { pattern: /claude-sonnet-4-5/,        limit: 1_000_000 },
   { pattern: /claude-haiku-4-5/,         limit:   200_000 },
@@ -78,8 +81,8 @@ export function assignColor(projectPath: string, autoColor: boolean): string {
 export function abbreviateName(projectName: string, config: Config): string {
   if (!config.compactMode) { return projectName; }
 
-  // Rule 1: shortNames override
-  if (config.shortNames[projectName] !== undefined) {
+  // Rule 1: shortNames override (hasOwnProperty guard prevents prototype pollution)
+  if (Object.prototype.hasOwnProperty.call(config.shortNames, projectName)) {
     return config.shortNames[projectName];
   }
 

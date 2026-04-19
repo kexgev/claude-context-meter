@@ -2,7 +2,7 @@
   "name": "claude-context-meter",
   "displayName": "Claude Context Meter",
   "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "kexgev",
   "repository": {
     "type": "git",
@@ -96,7 +96,7 @@
     "vsce:package": "vsce package"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.4"
+    "serialize-javascript": "7.0.4"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.0",
@@ -105,7 +105,7 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "@vscode/test-electron": "^2.3.0",
-    "@vscode/vsce": "^2.0.0",
+    "@vscode/vsce": "^3.7.1",
     "eslint": "^8.0.0",
     "mocha": "^11.3.0",
     "typescript": "^5.0.0"
