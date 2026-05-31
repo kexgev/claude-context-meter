@@ -29,25 +29,15 @@ const PALETTE = [
  * First match wins — order from most specific to least.
  */
 const MODEL_CONTEXT_LIMITS: { pattern: RegExp; limit: number }[] = [
-  // Claude 4.7 family
-  { pattern: /claude-opus-4-7/,          limit: 1_000_000 },
-  { pattern: /claude-sonnet-4-7/,        limit:   200_000 },
-  // Claude 4.6 family
-  { pattern: /claude-opus-4-6/,          limit: 1_000_000 },
-  { pattern: /claude-sonnet-4-6/,        limit:   200_000 },
-  // Claude 4.5 family
-  { pattern: /claude-sonnet-4-5/,        limit: 1_000_000 },
-  { pattern: /claude-haiku-4-5/,         limit:   200_000 },
-  // Claude 4 family
-  { pattern: /claude-opus-4/,            limit:   200_000 },
-  { pattern: /claude-sonnet-4/,          limit:   200_000 },
-  // Claude 3.5 family
+  // Haiku family — always 200K (catches claude-haiku-*, claude-3-haiku, claude-3-5-haiku)
+  { pattern: /claude-(3[._-]5-|3-)?haiku/, limit: 200_000 },
+  // Legacy Claude 3 / 3.5 — never had 1M context
   { pattern: /claude-3[._-]5-sonnet/,    limit:   200_000 },
-  { pattern: /claude-3[._-]5-haiku/,     limit:   200_000 },
-  // Claude 3 family
   { pattern: /claude-3-opus/,            limit:   200_000 },
   { pattern: /claude-3-sonnet/,          limit:   200_000 },
-  { pattern: /claude-3-haiku/,           limit:   200_000 },
+  // Catch-all for any other claude-* model (Opus/Sonnet 4.x and beyond) → 1M.
+  // Future-proofs new releases (Opus 4.8, 4.9, 5.x, etc.) without code changes.
+  { pattern: /claude-/,                  limit: 1_000_000 },
 ];
 
 export function detectTokenLimit(model: string, contextLimit: number): number {

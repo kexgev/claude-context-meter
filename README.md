@@ -37,10 +37,13 @@ Token limit is auto-detected from the model name:
 
 | Model | Context |
 |---|---|
-| Opus 4.6, Sonnet 4.5/4.6 | 1M tokens |
-| Opus 4, Sonnet 4, Haiku 4.5, Claude 3.x family | 200k tokens |
+| Opus 4.6/4.7/4.8, Sonnet 4.5/4.6/4.7, and any future Opus/Sonnet | 1M tokens |
+| All Haiku models (4.5, 3.5, 3) | 200k tokens |
+| Legacy Claude 3 / 3.5 Sonnet & Opus | 200k tokens |
 
-Unrecognized models fall back to the `contextLimit` setting.
+New Claude releases default to 1M unless they are Haiku — no extension update required.
+
+Unrecognized non-Claude models fall back to the `contextLimit` setting.
 
 ## Install
 
