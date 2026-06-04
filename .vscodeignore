@@ -5,6 +5,7 @@
 docs/**
 test/**
 src/**
+Projects/**
 tsconfig.json
 .eslintrc.json
 .gitignore

@@ -2,7 +2,7 @@
   "name": "claude-context-meter",
   "displayName": "Claude Context Meter",
   "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates. Auto-detects 1M context for Opus/Sonnet 4.x+ (incl. Opus 4.8) and 200K for Haiku.",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "publisher": "kexgev",
   "repository": {
     "type": "git",

@@ -20,6 +20,7 @@ export interface SessionInfo {
   pct: number;          // Math.round(total / limit * 1000) / 10
   lastUpdate: Date;     // fs.stat mtime
   active: boolean;      // (now - mtime) / 1000 < idleTimeout
+  filePath: string;     // absolute path to the JSONL transcript file
 }
 
 export interface Config {

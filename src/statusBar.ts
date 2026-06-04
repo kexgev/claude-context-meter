@@ -28,6 +28,15 @@ function escapeMd(s: string): string {
   return s.replace(/[\\`*_[\]()#+\-.!|]/g, '\\$&');
 }
 
+/**
+ * Sanitize text destined for an inline code span. Markdown does NOT process
+ * backslash escapes inside code spans, so escapeMd would render literal
+ * backslashes (e.g. `claude\-opus`). Strip backticks instead to keep the span intact.
+ */
+function escapeCode(s: string): string {
+  return s.replace(/`/g, '');
+}
+
 /** Status indicator emoji+label for tooltip. Always shown regardless of cfg.showEmoji. */
 function statusEmoji(pct: number, warn: number, danger: number): string {
   if (pct >= danger) { return '🔴 crit'; }
@@ -148,6 +157,9 @@ export class StatusBarManager {
         item.dispose();
         // Safe: deleting the current Map key during for...of does not skip other entries (ECMA-262 guarantee).
         this.items.delete(id);
+        // Prune the burn-rate ring buffer too; it rebuilds from scratch if the
+        // session reactivates. (hiddenSessions/notified are intentionally retained.)
+        this.readings.delete(id);
       }
     }
 
@@ -177,9 +189,9 @@ export class StatusBarManager {
       if (!item) {
         item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         item.command = {
-          command: 'claudeContextMeter.hideSession',
+          command: 'claudeContextMeter.showDetail',
           arguments: [session.id],
-          title: 'Hide session',
+          title: 'Show session detail',
         };
         this.items.set(session.id, item);
       }
@@ -253,7 +265,7 @@ export class StatusBarManager {
     const status = statusEmoji(session.pct, cfg.warningThreshold, cfg.dangerThreshold);
 
     md.appendMarkdown(`**${escapeMd(session.projectName)}**\n\n`);
-    md.appendMarkdown(`\`${escapeMd(session.model || 'unknown')}\`  ·  ${status} · ${session.pct}%\n\n`);
+    md.appendMarkdown(`\`${escapeCode(session.model || 'unknown')}\`  ·  ${status} · ${session.pct}%\n\n`);
     md.appendMarkdown(`${bar20}  ${session.pct}%\n`);
     md.appendMarkdown(`${tokens.total.toLocaleString()} / ${session.tokenLimit.toLocaleString()} tokens\n\n`);
     md.appendMarkdown(`---\n\n`);

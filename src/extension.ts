@@ -3,16 +3,33 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { Config } from './types';
+import { Config, SessionInfo } from './types';
 import { scanSessions } from './sessionManager';
 import { StatusBarManager, calcCost, fmtCost } from './statusBar';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarMgr: StatusBarManager;
 let watcher: vscode.FileSystemWatcher | undefined;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
 // sessionId → absolute JSONL file path (for click-to-dismiss)
 const sessionFilePaths = new Map<string, string>();
+
+const REFRESH_DEBOUNCE_MS = 150;
+
+/**
+ * Coalesce bursts of file-watcher events into a single refresh. Without this,
+ * a flurry of JSONL writes spawns overlapping async refresh() calls, and the
+ * sessionFilePaths.clear() inside refresh() can momentarily empty the map
+ * (a click landing in that window would find no path).
+ */
+function scheduleRefresh(): void {
+  if (refreshTimer) { clearTimeout(refreshTimer); }
+  refreshTimer = setTimeout(() => {
+    refreshTimer = undefined;
+    void refresh();
+  }, REFRESH_DEBOUNCE_MS);
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel('Claude Context Meter');
@@ -35,24 +52,13 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showInformationMessage('No active Claude sessions.');
         return;
       }
+      await copyStatsTable(sessions);
+    }),
+  );
 
-      const header = '| Project | Model | Tokens | Limit | % | Cost | Rate |\n|---|---|---|---|---|---|---|';
-      const esc = (s: string) => s.replace(/\|/g, '\\|'); // prevent markdown table injection
-      const rows = sessions.map(s => {
-        const cost = calcCost(s.tokens, s.model);
-        const costStr = cost > 0 ? fmtCost(cost).replace('~', '') : '—';
-        const burn = statusBarMgr.calcBurnRate(s.id, s.tokenLimit, s.tokens.total);
-        const rateStr = burn ? `${(burn.recent / 1000).toFixed(1)}k/min` : '—';
-        return `| ${esc(s.projectName)} | ${esc(s.model || 'unknown')} | ${s.tokens.total.toLocaleString()} | ${s.tokenLimit.toLocaleString()} | ${s.pct}% | ${costStr} | ${rateStr} |`;
-      });
-
-      const table = [header, ...rows].join('\n');
-      try {
-        await vscode.env.clipboard.writeText(table);
-        void vscode.window.showInformationMessage('Context stats copied!');
-      } catch {
-        void vscode.window.showErrorMessage('Failed to copy stats to clipboard.');
-      }
+  context.subscriptions.push(
+    vscode.commands.registerCommand('claudeContextMeter.showDetail', (sessionId: string) => {
+      void showSessionDetail(sessionId);
     }),
   );
 
@@ -60,7 +66,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('claudeContextMeter')) {
         validateThresholds();
-        void refresh();
+        scheduleRefresh();
       }
     }),
   );
@@ -71,8 +77,89 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+  if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = undefined; }
   watcher?.dispose();
   statusBarMgr?.dispose();
+}
+
+// ── Session detail popup ────────────────────────────────────────────────────
+
+/** Build a markdown stats table for the given sessions and copy it to the clipboard. */
+async function copyStatsTable(sessions: SessionInfo[]): Promise<void> {
+  const header = '| Project | Model | Tokens | Limit | % | Cost | Rate |\n|---|---|---|---|---|---|---|';
+  const esc = (s: string) => s.replace(/\|/g, '\\|'); // prevent markdown table injection
+  const rows = sessions.map(s => {
+    const cost = calcCost(s.tokens, s.model);
+    const costStr = cost > 0 ? fmtCost(cost).replace('~', '') : '—';
+    const burn = statusBarMgr.calcBurnRate(s.id, s.tokenLimit, s.tokens.total);
+    const rateStr = burn ? `${(burn.recent / 1000).toFixed(1)}k/min` : '—';
+    return `| ${esc(s.projectName)} | ${esc(s.model || 'unknown')} | ${s.tokens.total.toLocaleString()} | ${s.tokenLimit.toLocaleString()} | ${s.pct}% | ${costStr} | ${rateStr} |`;
+  });
+
+  const table = [header, ...rows].join('\n');
+  try {
+    await vscode.env.clipboard.writeText(table);
+    void vscode.window.showInformationMessage('Context stats copied!');
+  } catch {
+    void vscode.window.showErrorMessage('Failed to copy stats to clipboard.');
+  }
+}
+
+interface DetailAction extends vscode.QuickPickItem {
+  action: 'hide' | 'open' | 'copy';
+}
+
+/** Click handler for a status bar item: show a quick-pick with stats summary + actions. */
+async function showSessionDetail(sessionId: string): Promise<void> {
+  const session = statusBarMgr.getSessions().find(s => s.id === sessionId);
+  if (!session) {
+    void vscode.window.showInformationMessage('Session no longer active.');
+    return;
+  }
+
+  const cost = calcCost(session.tokens, session.model);
+  const costStr = cost > 0 ? fmtCost(cost).replace('~', '') : '—';
+  const burn = statusBarMgr.calcBurnRate(session.id, session.tokenLimit, session.tokens.total);
+  const burnStr = burn ? `🔥${(burn.recent / 1000).toFixed(1)}k/min` : '';
+  const summary = [
+    `${session.tokens.total.toLocaleString()}/${session.tokenLimit.toLocaleString()} (${session.pct}%)`,
+    costStr !== '—' ? `$${costStr}` : '',
+    burnStr,
+  ].filter(Boolean).join('  ·  ');
+
+  const filePath = sessionFilePaths.get(sessionId);
+  const items: DetailAction[] = [
+    { action: 'hide', label: '$(eye-closed) Hide', description: 'Dismiss until next session activity' },
+  ];
+  if (filePath) {
+    items.push({ action: 'open', label: '$(go-to-file) Open transcript', description: 'Open the .jsonl conversation file' });
+  }
+  items.push({ action: 'copy', label: '$(copy) Copy stats', description: 'Copy this session as a markdown row' });
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title: `${session.projectName} — ${summary}`,
+    placeHolder: 'Choose an action',
+  });
+  if (!picked) { return; }
+
+  switch (picked.action) {
+    case 'hide':
+      statusBarMgr.hideSession(sessionId);
+      break;
+    case 'open':
+      if (filePath) {
+        try {
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+          await vscode.window.showTextDocument(doc, { preview: true });
+        } catch {
+          void vscode.window.showErrorMessage('Failed to open transcript file.');
+        }
+      }
+      break;
+    case 'copy':
+      await copyStatsTable([session]);
+      break;
+  }
 }
 
 // ── Config ────────────────────────────────────────────────────────────────
@@ -118,19 +205,12 @@ async function refresh(): Promise<void> {
   try {
     const result = await scanSessions(projectsDir, config, msg => outputChannel.appendLine(msg));
 
-    // Rebuild file path map for click-to-dismiss
+    // Rebuild file path map for click-to-dismiss using the real path from the scan
+    // (reconstructing it from projectPath is lossy — the Windows drive colon and any
+    //  '.'/special chars collapse to '-' during encoding and can't be reversed).
     sessionFilePaths.clear();
     for (const session of result.sessions) {
-      // Re-encode projectPath back to directory name to locate the file
-      const encoded = session.projectPath
-        .replace(/^([A-Z]{1,2}):\\/, '$1-') // Windows drive
-        .replace(/\\/g, '-')
-        .replace(/^\//, '-')                // Unix leading slash
-        .replace(/\//g, '-');
-      const filePath = path.join(projectsDir, encoded, session.id + '.jsonl');
-      if (fs.existsSync(filePath)) {
-        sessionFilePaths.set(session.id, filePath);
-      }
+      sessionFilePaths.set(session.id, session.filePath);
     }
 
     statusBarMgr.update(result.sessions);
@@ -146,9 +226,9 @@ function setupWatcher(context: vscode.ExtensionContext): void {
   try {
     const pattern = new vscode.RelativePattern(vscode.Uri.file(projectsDir), '**/*.jsonl');
     watcher = vscode.workspace.createFileSystemWatcher(pattern);
-    watcher.onDidCreate(() => void refresh());
-    watcher.onDidChange(() => void refresh());
-    watcher.onDidDelete(() => void refresh());
+    watcher.onDidCreate(() => scheduleRefresh());
+    watcher.onDidChange(() => scheduleRefresh());
+    watcher.onDidDelete(() => scheduleRefresh());
     context.subscriptions.push(watcher);
   } catch (err) {
     outputChannel.appendLine(`[warn] File watcher setup failed: ${err}`);

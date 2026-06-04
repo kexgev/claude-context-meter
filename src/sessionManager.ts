@@ -170,18 +170,23 @@ export async function scanSessions(
     }
   }
 
-  // Supersession: find newest mtime per projectPath
-  const newestMtime = new Map<string, number>();
+  // Supersession: find the single newest session per projectPath.
+  // Tie-break equal mtimes by id (lexicographically larger wins) so that two
+  // files written in the same millisecond don't both render a status bar item.
+  const newest = new Map<string, { mtime: number; id: string }>();
   for (const s of rawSessions) {
-    const prev = newestMtime.get(s.projectPath) ?? 0;
-    if (s.mtime.getTime() > prev) { newestMtime.set(s.projectPath, s.mtime.getTime()); }
+    const m = s.mtime.getTime();
+    const cur = newest.get(s.projectPath);
+    if (!cur || m > cur.mtime || (m === cur.mtime && s.id > cur.id)) {
+      newest.set(s.projectPath, { mtime: m, id: s.id });
+    }
   }
 
-  // Build sessions[] (non-idle, non-superseded)
+  // Build sessions[] (non-idle, only the single newest per project)
   const sessions: SessionInfo[] = [];
   for (const s of rawSessions) {
     if (!s.active) { continue; }
-    if (s.mtime.getTime() < (newestMtime.get(s.projectPath) ?? 0)) { continue; }
+    if (newest.get(s.projectPath)?.id !== s.id) { continue; }
 
     const pct = Math.round(s.tokens.total / s.tokenLimit * 1000) / 10;
     sessions.push({
@@ -196,6 +201,7 @@ export async function scanSessions(
       pct,
       lastUpdate: s.mtime,
       active: true,
+      filePath: s.filePath,
     });
   }
 
