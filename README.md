@@ -1,17 +1,26 @@
 # Claude Context Meter
 
-A minimal VS Code extension that shows your Claude Code token usage as an ASCII progress bar directly in the status bar — updates instantly via file watcher, zero polling.
+A minimal VS Code extension that shows your Claude Code token usage as an ASCII progress bar directly in the status bar — updates instantly via file watcher, zero polling. Also shows live cost and burn rate per session.
 
 ## Status bar
 
 ```
-🤖 my-project ███░░ 156k/200k (78%) in:140k out:16k
+🤖 my-project ███░░ 156k/200k (78%) ~$1.20 🔥2.1k/m
 ```
 
-The bar fills as your context fills. Color changes automatically:
+The bar fills as your context fills. After the percentage it shows the running session **cost** (`~$1.20`) and the recent **burn rate** (`🔥2.1k/m` = ~2,100 tokens/min). Color changes automatically:
 - Default — under warning threshold
 - **Yellow** — above warning (default 50%)
 - **Red** — above danger threshold (default 75%)
+
+You also get a warning/critical notification the first time a session crosses each threshold.
+
+## Click actions
+
+Click a meter to open a quick menu for that session:
+- **Hide** — dismiss this meter until the session has new activity
+- **Open transcript** — open the session's `.jsonl` log
+- **Copy stats** — copy this session's stats as a markdown row
 
 ## Tooltip (hover)
 
@@ -26,8 +35,18 @@ my-project
 ───────────────────────────────────
 in: 140,000  ·  out: 16,000  ·  cr: 0  ·  cw: 121
 
+🔥 recent: ~2.1k/min  ·  avg: ~2.1k/min
+⏳ ~21 min to full
+
+💰 cost: $1.20  (in: $0.42 · out: $0.24)
+
 Updated 9:42:15 PM
 ```
+
+## Commands
+
+Available from the Command Palette (`Ctrl/Cmd+Shift+P`):
+- **Claude Context Meter: Copy Context Stats** — copy a markdown table of all active sessions to the clipboard
 
 ## How it works
 
@@ -47,6 +66,10 @@ Unrecognized non-Claude models fall back to the `contextLimit` setting.
 
 ## Install
 
+### From the Marketplace (recommended)
+
+Install **[Claude Context Meter](https://marketplace.visualstudio.com/items?itemName=Kexgev.claude-context-meter)** from the VS Code Marketplace, or search "Claude Context Meter" in the Extensions panel (`Ctrl/Cmd+Shift+X`). Updates arrive automatically.
+
 ### From VSIX
 
 1. Download the latest `.vsix` from [Releases](https://github.com/kexgev/claude-context-meter/releases)
@@ -54,7 +77,7 @@ Unrecognized non-Claude models fall back to the `contextLimit` setting.
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-1.2.0.vsix
+code --install-extension claude-context-meter-1.4.0.vsix
 ```
 
 ### Build from source
@@ -64,7 +87,7 @@ git clone https://github.com/kexgev/claude-context-meter.git
 cd claude-context-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-1.2.0.vsix
+code --install-extension claude-context-meter-1.4.0.vsix
 ```
 
 ## Requirements
