@@ -2,7 +2,7 @@
   "name": "claude-context-meter",
   "displayName": "Claude Code Usage Meter",
   "description": "Live Claude Code usage in your status bar — subscription session and weekly limits, context window, cost, burn rate, spend summaries, and budget alerts. Supports Claude Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and every future Claude model automatically.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "publisher": "kexgev",
   "keywords": [
     "claude",

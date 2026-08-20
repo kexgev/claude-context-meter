@@ -141,7 +141,7 @@ Use this if you're on VSCodium, Cursor, or another build without Marketplace acc
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-2.0.0.vsix --force
+code --install-extension claude-context-meter-2.0.1.vsix --force
 ```
 
 > **Heads up:** VS Code *pins* extensions installed from a `.vsix`, which turns off
@@ -162,7 +162,7 @@ git clone https://github.com/kexgev/claude-context-meter.git
 cd claude-context-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-2.0.0.vsix --force
+code --install-extension claude-context-meter-2.0.1.vsix --force
 ```
 
 On Windows, `./scripts/install-local.ps1` does the build, install, registration check, and stale-folder cleanup in one step.
