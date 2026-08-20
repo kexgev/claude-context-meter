@@ -99,7 +99,13 @@ export function activate(context: vscode.ExtensionContext): void {
   setupWatcher(context);
   void refresh();
 
-  budgetCheckTimer = setInterval(() => void checkBudget(), BUDGET_CHECK_INTERVAL_MS);
+  // Also re-render usage on a timer. The file watchers only fire while Claude
+  // Code is writing, so without this the staleness marker would never appear
+  // in exactly the case it matters: Claude Code not running at all.
+  budgetCheckTimer = setInterval(() => {
+    refreshUsage();
+    void checkBudget();
+  }, BUDGET_CHECK_INTERVAL_MS);
   context.subscriptions.push({ dispose: () => clearInterval(budgetCheckTimer) });
   void checkBudget();
 
