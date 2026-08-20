@@ -5,6 +5,30 @@ All notable changes to **Claude Context Meter** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] — 2026-08-20
+
+### Added
+- **Subscription usage meter.** A new status bar item showing your Claude plan's
+  session (5-hour) and weekly limits — the same figures Claude Code's `/usage`
+  command reports. It colors yellow then red as you approach a limit, and the
+  hover lists every limit your plan reports along with its reset time.
+
+  The data comes from Claude Code's own local usage cache in `~/.claude.json`.
+  No sign-in, no token, no account access, and no network requests are involved.
+  Because it is a cache it only refreshes while Claude Code is running, so a
+  reading older than `usageStaleMinutes` is marked stale rather than presented
+  as current. Users on an API key rather than a subscription have no usage data,
+  and the item stays hidden for them.
+
+- **Show Subscription Usage** command — lists every plan limit with its reset time.
+- Four settings: `showUsage` (default `true`), `usageWarningThreshold` (`50`),
+  `usageDangerThreshold` (`75`), and `usageStaleMinutes` (`30`).
+- A one-time notification introducing the feature, with a "Turn off" action.
+
+### Changed
+- `CLAUDE_CONFIG_DIR` is honored when locating Claude Code's config, for setups
+  that relocate it.
+
 ## [1.5.0] — 2026-08-20
 
 ### Fixed
@@ -99,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[1.6.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.4.0
 [1.3.1]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.3.1

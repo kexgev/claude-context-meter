@@ -2,18 +2,17 @@
 
 A minimal VS Code extension that shows your Claude Code token usage as an ASCII progress bar directly in the status bar — updates instantly via file watcher, zero polling. Also shows live cost and burn rate per session.
 
-## What's new in 1.5.0
+## What's new in 1.6.0
 
-**Pricing is now correct for current Claude models.** The old rate table billed Opus at `$15/$75` per MTok — the current Opus tier (4.5 through 5) is `$5/$25`, so costs were overstated roughly **3x**. Haiku and the new Fable 5 / Mythos 5 tier were wrong too. If you've been reading this extension's cost figures, they were high.
+**Subscription usage.** The meter now shows your Claude session (5-hour) and weekly limits right in the status bar — the same numbers `/usage` reports in Claude Code.
 
-Also added:
-- **Spend Summary** — total cost across every session for Today / This Week / All Time, per project, copyable as markdown
-- **Daily budget alerts** — one warning when the day's spend crosses a threshold you set
-- **Claude Opus 5, Sonnet 5, Fable 5, Mythos 5, Haiku 4.5** explicitly supported
-- **Bedrock / Vertex AI / Foundry model IDs** display cleanly
-- **Show Diagnostics** command — confirms which version is actually running and why a cost looks the way it does
+```
+⏱ 45% · 6%w        🤖 my-project ███░░ 16% ~$1.20 🔥2.1k/m
+```
 
-Full history in the [changelog](CHANGELOG.md).
+It reads Claude Code's own local usage cache, so there is **no account access, no sign-in, and no network requests**. Hover for every limit with its reset time. See [Subscription usage](#subscription-usage) below.
+
+Earlier in 1.5.0: corrected pricing for current Claude models, spend summaries, and daily budget alerts — full history in the [changelog](CHANGELOG.md).
 
 ## Status bar
 
@@ -56,12 +55,44 @@ in: 140,000  ·  out: 16,000  ·  cr: 0  ·  cw: 121
 Updated 9:42:15 PM
 ```
 
+## Subscription usage
+
+```
+⏱ 45% · 6%w
+```
+
+Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. The item colors yellow then red as you approach your limits, and hovering shows every limit your plan reports:
+
+```
+Claude subscription
+
+Session  ·  🟡 warn
+
+█████████░░░░░░░░░░░  45%
+Resets 7:39pm
+
+Week (all models)  ·  🟢 safe
+
+█░░░░░░░░░░░░░░░░░░░  6%
+Resets Aug 24, 3:59pm
+
+───────────────────────────────────
+Updated 2 min ago
+```
+
+**How it works.** Claude Code keeps a local cache of your usage in `~/.claude.json`; this extension reads that file. There is no sign-in, no token, no account access, and no network request — it is the same local-file approach used for the context meter itself.
+
+Because it is a cache, it only refreshes while Claude Code is running. If a reading gets old it is marked stale (`⚠`) rather than shown as though it were current; `usageStaleMinutes` controls that cutoff.
+
+If you use an API key rather than a Claude subscription, there is no usage data and the item simply doesn't appear. Set `claudeContextMeter.showUsage` to `false` to hide it.
+
 ## Commands
 
 Available from the Command Palette (`Ctrl/Cmd+Shift+P`):
 - **Claude Context Meter: Copy Context Stats** — copy a markdown table of all active sessions to the clipboard
 - **Claude Context Meter: Show Spend Summary** — pick Today / This Week / All Time and see total cost across every session (active or idle), with a per-project breakdown you can copy as markdown
 - **Claude Context Meter: Show Session Detail** — same quick menu you get by clicking a status bar item (Hide / Open transcript / Copy stats)
+- **Claude Context Meter: Show Subscription Usage** — list every plan limit with its reset time
 - **Claude Context Meter: Show Diagnostics** — running version, detected model, resolved pricing tier and rates, context limit, and transcript paths. Handy when reporting an issue
 
 ## Budget alerts
@@ -102,7 +133,7 @@ Use this if you're on VSCodium, Cursor, or another build without Marketplace acc
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-1.5.0.vsix --force
+code --install-extension claude-context-meter-1.6.0.vsix --force
 ```
 
 > **Heads up:** VS Code *pins* extensions installed from a `.vsix`, which turns off
@@ -123,7 +154,7 @@ git clone https://github.com/kexgev/claude-context-meter.git
 cd claude-context-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-1.5.0.vsix --force
+code --install-extension claude-context-meter-1.6.0.vsix --force
 ```
 
 On Windows, `./scripts/install-local.ps1` does the build, install, registration check, and stale-folder cleanup in one step.
@@ -146,6 +177,10 @@ On Windows, `./scripts/install-local.ps1` does the build, install, registration 
 | `claudeContextMeter.autoColor` | `true` | Auto-assign a unique pastel color per project |
 | `claudeContextMeter.shortNames` | `{}` | Custom name overrides e.g. `{ "my-project": "MP" }` |
 | `claudeContextMeter.dailyBudget` | `0` | Daily spend alert threshold in USD across all sessions (`0` = disabled) |
+| `claudeContextMeter.showUsage` | `true` | Show Claude subscription usage (session and weekly limits) |
+| `claudeContextMeter.usageWarningThreshold` | `50` | Subscription usage % at which the meter turns yellow |
+| `claudeContextMeter.usageDangerThreshold` | `75` | Subscription usage % at which the meter turns red |
+| `claudeContextMeter.usageStaleMinutes` | `30` | Minutes after which a cached usage reading is marked stale |
 
 ## License
 

@@ -7,6 +7,7 @@ import { Config, SessionInfo } from './types';
 import { scanSessions, cleanModelName } from './sessionManager';
 import { StatusBarManager, calcCost, fmtCost, describePricing } from './statusBar';
 import { scanAllSessionsForSpend, filterByRange, summarize, SpendRange } from './spendSummary';
+import { resolveClaudeConfigPath, readUsageSnapshot, formatAge } from './subscriptionUsage';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarMgr: StatusBarManager;
@@ -80,6 +81,12 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('claudeContextMeter.showUsageDetail', () => {
+      void showUsageDetail();
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('claudeContextMeter')) {
         validateThresholds();
@@ -97,6 +104,7 @@ export function activate(context: vscode.ExtensionContext): void {
   void checkBudget();
 
   void showWhatsNewIfUpdated(context);
+  void showUsageNoticeIfNeeded(context);
 }
 
 export function deactivate(): void {
@@ -341,6 +349,71 @@ async function showWhatsNewIfUpdated(context: vscode.ExtensionContext): Promise<
   }
 }
 
+// ── Subscription usage ─────────────────────────
+
+/**
+ * Re-read Claude Code's local usage cache and push it to the status bar.
+ * A null result (missing file, mid-write, or no subscription) leaves the last
+ * good snapshot on screen rather than making the item disappear.
+ */
+function refreshUsage(): void {
+  const snapshot = readUsageSnapshot(resolveClaudeConfigPath(), msg => outputChannel.appendLine(msg));
+  statusBarMgr.updateUsage(snapshot);
+}
+
+/** Click handler for the subscription meter: list every reported limit. */
+async function showUsageDetail(): Promise<void> {
+  const usage = statusBarMgr.getUsage();
+  if (!usage) {
+    void vscode.window.showInformationMessage(
+      'No Claude subscription usage found. This requires signing in to Claude Code with a subscription.',
+    );
+    return;
+  }
+
+  const cfg = getConfig();
+  const stale = usage.ageMs > cfg.usageStaleMinutes * 60_000;
+
+  const items: vscode.QuickPickItem[] = usage.limits.map(limit => {
+    const reset = limit.resetsAt
+      ? `Resets ${limit.resetsAt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+      : 'No reset time reported';
+    return {
+      label: `$(dashboard) ${limit.label} — ${Math.round(limit.percent)}%`,
+      description: reset,
+    };
+  });
+
+  await vscode.window.showQuickPick(items, {
+    title: `Claude subscription — updated ${formatAge(usage.ageMs)}${stale ? ' (stale)' : ''}`,
+    placeHolder: stale ? 'Start Claude Code to refresh these numbers' : 'Subscription limits',
+  });
+}
+
+/**
+ * Announce the usage meter once. The numbers come from a local cache rather
+ * than any account access, so this is a feature announcement rather than a
+ * consent prompt — but users should still know where they come from.
+ */
+async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promise<void> {
+  if (context.globalState.get<boolean>('usageNoticeShown')) { return; }
+  if (!getConfig().showUsage) { return; }
+  if (!statusBarMgr.getUsage()) { return; } // no subscription data — nothing to announce
+
+  await context.globalState.update('usageNoticeShown', true);
+
+  const action = await vscode.window.showInformationMessage(
+    "Claude Context Meter now shows your Claude subscription limits, read from Claude Code's local usage cache. No account access required.",
+    'Got it',
+    'Turn off',
+  );
+  if (action === 'Turn off') {
+    await vscode.workspace
+      .getConfiguration('claudeContextMeter')
+      .update('showUsage', false, vscode.ConfigurationTarget.Global);
+  }
+}
+
 // ── Config ────────────────────────────────────────────────────────────────
 
 function getConfig(): Config {
@@ -355,6 +428,10 @@ function getConfig(): Config {
     autoColor: cfg.get<boolean>('autoColor', true),
     shortNames: cfg.get<Record<string, string>>('shortNames', {}),
     dailyBudget: cfg.get<number>('dailyBudget', 0),
+    showUsage: cfg.get<boolean>('showUsage', true),
+    usageWarningThreshold: cfg.get<number>('usageWarningThreshold', 50),
+    usageDangerThreshold: cfg.get<number>('usageDangerThreshold', 75),
+    usageStaleMinutes: cfg.get<number>('usageStaleMinutes', 30),
   };
 }
 
@@ -394,6 +471,7 @@ async function refresh(): Promise<void> {
     }
 
     statusBarMgr.update(result.sessions);
+    refreshUsage();
   } catch (err) {
     outputChannel.appendLine(`[error] Refresh failed: ${err}`);
   }
@@ -412,5 +490,19 @@ function setupWatcher(context: vscode.ExtensionContext): void {
     context.subscriptions.push(watcher);
   } catch (err) {
     outputChannel.appendLine(`[warn] File watcher setup failed: ${err}`);
+  }
+
+  // Claude Code rewrites ~/.claude.json frequently; the shared debounce in
+  // scheduleRefresh() keeps that from turning into a refresh storm.
+  try {
+    const configPath = resolveClaudeConfigPath();
+    const configWatcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(path.dirname(configPath)), path.basename(configPath)),
+    );
+    configWatcher.onDidCreate(() => scheduleRefresh());
+    configWatcher.onDidChange(() => scheduleRefresh());
+    context.subscriptions.push(configWatcher);
+  } catch (err) {
+    outputChannel.appendLine(`[warn] Usage cache watcher setup failed: ${err}`);
   }
 }

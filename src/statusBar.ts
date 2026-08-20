@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { SessionInfo, Config, TokenBreakdown } from './types';
 import { abbreviateName, cleanModelName } from './sessionManager';
+import { UsageSnapshot, peakOf, formatAge } from './subscriptionUsage';
 
 /** 5-char Unicode progress bar. Each block = 20%. Used in status bar item text. */
 function buildBar5(pct: number): string {
@@ -128,6 +129,41 @@ export function calcBurnRateFromBuffer(
   return { recent: rate, avg: rate, timeToFull };
 }
 
+/** Format a reset timestamp in the user's locale, dropping the date when it is today. */
+function fmtReset(resetsAt: Date | null): string {
+  if (!resetsAt) { return ''; }
+  const isToday = resetsAt.toDateString() === new Date().toDateString();
+  const time = resetsAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return isToday
+    ? `Resets ${time}`
+    : `Resets ${resetsAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
+/** Tooltip for the account-wide subscription meter: one bar per reported limit. */
+function buildUsageTooltip(usage: UsageSnapshot, cfg: Config, stale: boolean): vscode.MarkdownString {
+  const md = new vscode.MarkdownString();
+  md.supportHtml = false;
+
+  md.appendMarkdown('**Claude subscription**\n\n');
+
+  for (const limit of usage.limits) {
+    const status = statusEmoji(limit.percent, cfg.usageWarningThreshold, cfg.usageDangerThreshold);
+    md.appendMarkdown(`${escapeMd(limit.label)}  ·  ${status}\n\n`);
+    md.appendMarkdown(`${buildBar20(limit.percent)}  ${Math.round(limit.percent)}%\n`);
+    const reset = fmtReset(limit.resetsAt);
+    if (reset) { md.appendMarkdown(`${escapeMd(reset)}\n`); }
+    md.appendMarkdown('\n');
+  }
+
+  md.appendMarkdown('---\n\n');
+  md.appendMarkdown(
+    stale
+      ? `⚠ Last updated ${formatAge(usage.ageMs)} — start Claude Code to refresh`
+      : `*Updated ${formatAge(usage.ageMs)}*`,
+  );
+  return md;
+}
+
 export class StatusBarManager {
   private readonly items = new Map<string, vscode.StatusBarItem>();
   // Maps sessionId → file mtime at dismiss time. Entries are retained even after idle sessions
@@ -137,6 +173,10 @@ export class StatusBarManager {
   private readonly readings = new Map<string, Array<{ tokens: number; time: number }>>();
   private readonly notified = new Map<string, Set<'warn' | 'crit'>>();
   private lastSessions: SessionInfo[] = [];
+  // Subscription limits are account-wide, so they get one item of their own
+  // rather than being folded into the per-project meters.
+  private usageItem: vscode.StatusBarItem | undefined;
+  private lastUsage: UsageSnapshot | null = null;
 
   constructor(
     private readonly getConfig: () => Config,
@@ -287,9 +327,62 @@ export class StatusBarManager {
   dispose(): void {
     for (const item of this.items.values()) { item.dispose(); }
     this.items.clear();
+    this.usageItem?.dispose();
+    this.usageItem = undefined;
+    this.lastUsage = null;
     this.readings.clear();
     this.notified.clear();
     this.lastSessions = [];
+  }
+
+  getUsage(): UsageSnapshot | null {
+    return this.lastUsage;
+  }
+
+  /**
+   * Render the account-wide subscription meter. Passing null keeps the last
+   * good snapshot on screen — ~/.claude.json is rewritten constantly and a
+   * read landing mid-write should not make the item flicker away.
+   */
+  updateUsage(snapshot: UsageSnapshot | null): void {
+    const cfg = this.getConfig();
+    if (snapshot) { this.lastUsage = snapshot; }
+    const usage = this.lastUsage;
+
+    if (!cfg.showUsage || !usage) {
+      this.usageItem?.dispose();
+      this.usageItem = undefined;
+      return;
+    }
+
+    if (!this.usageItem) {
+      this.usageItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+      this.usageItem.command = { command: 'claudeContextMeter.showUsageDetail', title: 'Show subscription usage' };
+    }
+
+    const session = peakOf(usage, 'session');
+    const weekly = peakOf(usage, 'weekly');
+    const parts = [
+      session ? `${Math.round(session.percent)}%` : '',
+      weekly ? `${Math.round(weekly.percent)}%w` : '',
+    ].filter(Boolean);
+
+    const stale = usage.ageMs > cfg.usageStaleMinutes * 60_000;
+    this.usageItem.text = `$(dashboard) ${parts.join(' · ')}${stale ? ' ⚠' : ''}`;
+    this.usageItem.tooltip = buildUsageTooltip(usage, cfg, stale);
+
+    // Colour on the worst limit, so a near-full weekly cap is not masked by a
+    // fresh session window.
+    const peak = Math.max(session?.percent ?? 0, weekly?.percent ?? 0);
+    if (peak >= cfg.usageDangerThreshold) {
+      this.usageItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+    } else if (peak >= cfg.usageWarningThreshold) {
+      this.usageItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    } else {
+      this.usageItem.backgroundColor = undefined;
+    }
+
+    this.usageItem.show();
   }
 
   private buildTooltip(session: SessionInfo, cfg: Config): vscode.MarkdownString {

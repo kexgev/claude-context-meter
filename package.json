@@ -1,8 +1,8 @@
 {
   "name": "claude-context-meter",
   "displayName": "Claude Context Meter",
-  "description": "Live token usage, cost, and spend tracking for Claude Code — status bar meter, burn rate, daily budget alerts. Supports Claude Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and every future Claude model automatically.",
-  "version": "1.5.0",
+  "description": "Live token usage, cost, and Claude subscription limits for Claude Code — status bar meter, session/weekly usage, burn rate, spend summaries, and budget alerts. Supports Claude Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and every future Claude model automatically.",
+  "version": "1.6.0",
   "publisher": "kexgev",
   "keywords": [
     "claude",
@@ -18,7 +18,11 @@
     "llm",
     "opus",
     "sonnet",
-    "haiku"
+    "haiku",
+    "usage",
+    "rate limit",
+    "subscription",
+    "budget"
   ],
   "repository": {
     "type": "git",
@@ -96,6 +100,32 @@
           "default": 0,
           "minimum": 0,
           "description": "Daily spend alert threshold in USD across all sessions (0 = disabled)"
+        },
+        "claudeContextMeter.showUsage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Claude subscription usage (session and weekly limits) in the status bar"
+        },
+        "claudeContextMeter.usageWarningThreshold": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 99,
+          "description": "Subscription usage percentage at which the meter turns yellow"
+        },
+        "claudeContextMeter.usageDangerThreshold": {
+          "type": "number",
+          "default": 75,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "Subscription usage percentage at which the meter turns red"
+        },
+        "claudeContextMeter.usageStaleMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "Minutes after which the cached usage reading is marked stale"
         }
       }
     },
@@ -123,6 +153,11 @@
       {
         "command": "claudeContextMeter.showDiagnostics",
         "title": "Show Diagnostics",
+        "category": "Claude Context Meter"
+      },
+      {
+        "command": "claudeContextMeter.showUsageDetail",
+        "title": "Show Subscription Usage",
         "category": "Claude Context Meter"
       }
     ]

@@ -33,6 +33,10 @@ export interface Config {
   autoColor: boolean;
   shortNames: Record<string, string>;
   dailyBudget: number;
+  showUsage: boolean;
+  usageWarningThreshold: number;
+  usageDangerThreshold: number;
+  usageStaleMinutes: number;
 }
 
 export interface SessionResult {
