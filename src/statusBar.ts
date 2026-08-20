@@ -144,7 +144,7 @@ function buildUsageTooltip(usage: UsageSnapshot, cfg: Config, stale: boolean): v
   const md = new vscode.MarkdownString();
   md.supportHtml = false;
 
-  md.appendMarkdown('**Claude subscription**\n\n');
+  md.appendMarkdown('**Claude subscription usage**\n\n');
 
   for (const limit of usage.limits) {
     const status = statusEmoji(limit.percent, cfg.usageWarningThreshold, cfg.usageDangerThreshold);
@@ -368,7 +368,7 @@ export class StatusBarManager {
     ].filter(Boolean);
 
     const stale = usage.ageMs > cfg.usageStaleMinutes * 60_000;
-    this.usageItem.text = `$(dashboard) ${parts.join(' · ')}${stale ? ' ⚠' : ''}`;
+    this.usageItem.text = `$(dashboard) Usage ${parts.join(' · ')}${stale ? ' ⚠' : ''}`;
     this.usageItem.tooltip = buildUsageTooltip(usage, cfg, stale);
 
     // Colour on the worst limit, so a near-full weekly cap is not masked by a

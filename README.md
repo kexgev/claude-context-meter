@@ -7,7 +7,7 @@ A minimal VS Code extension that shows your Claude Code token usage as an ASCII 
 **Subscription usage.** The meter now shows your Claude session (5-hour) and weekly limits right in the status bar — the same numbers `/usage` reports in Claude Code.
 
 ```
-⏱ 45% · 6%w        🤖 my-project ███░░ 16% ~$1.20 🔥2.1k/m
+⏱ Usage 45% · 6%w        🤖 my-project ███░░ 16% ~$1.20 🔥2.1k/m
 ```
 
 It reads Claude Code's own local usage cache, so there is **no account access, no sign-in, and no network requests**. Hover for every limit with its reset time. See [Subscription usage](#subscription-usage) below.
@@ -58,13 +58,13 @@ Updated 9:42:15 PM
 ## Subscription usage
 
 ```
-⏱ 45% · 6%w
+⏱ Usage 45% · 6%w
 ```
 
 Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. The item colors yellow then red as you approach your limits, and hovering shows every limit your plan reports:
 
 ```
-Claude subscription
+Claude subscription usage
 
 Session  ·  🟡 warn
 
