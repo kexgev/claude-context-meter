@@ -61,19 +61,19 @@ Updated 9:42:15 PM
 ⏱ Usage 45% · 6%w
 ```
 
-Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. The item colors yellow then red as you approach your limits, and hovering shows every limit your plan reports:
+Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows every limit your plan reports:
 
 ```
 Claude subscription usage
 
-Session  ·  🟡 warn
+Session  ·  🟢 safe
 
-█████████░░░░░░░░░░░  45%
+🟦🟦🟦🟦🟦⬜⬜⬜⬜⬜  45% used
 Resets 7:39pm
 
 Week (all models)  ·  🟢 safe
 
-█░░░░░░░░░░░░░░░░░░░  6%
+🟦⬜⬜⬜⬜⬜⬜⬜⬜⬜  6% used
 Resets Aug 24, 3:59pm
 
 ───────────────────────────────────

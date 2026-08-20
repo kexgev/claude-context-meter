@@ -129,6 +129,17 @@ export function calcBurnRateFromBuffer(
   return { recent: rate, avg: rate, timeToFull };
 }
 
+/**
+ * 10-segment coloured bar for usage limits. Unicode block characters cannot be
+ * coloured inside a Markdown tooltip, so severity is carried by the glyph
+ * itself: blue while safe, amber approaching the limit, red past it.
+ */
+function buildUsageBar(pct: number, warn: number, danger: number): string {
+  const filled = Math.min(10, Math.round(pct / 10));
+  const glyph = pct >= danger ? '\u{1F7E5}' : pct >= warn ? '\u{1F7E7}' : '\u{1F7E6}';
+  return glyph.repeat(filled) + '\u2B1C'.repeat(10 - filled);
+}
+
 /** Format a reset timestamp in the user's locale, dropping the date when it is today. */
 function fmtReset(resetsAt: Date | null): string {
   if (!resetsAt) { return ''; }
@@ -149,7 +160,7 @@ function buildUsageTooltip(usage: UsageSnapshot, cfg: Config, stale: boolean): v
   for (const limit of usage.limits) {
     const status = statusEmoji(limit.percent, cfg.usageWarningThreshold, cfg.usageDangerThreshold);
     md.appendMarkdown(`${escapeMd(limit.label)}  ·  ${status}\n\n`);
-    md.appendMarkdown(`${buildBar20(limit.percent)}  ${Math.round(limit.percent)}%\n`);
+    md.appendMarkdown(`${buildUsageBar(limit.percent, cfg.usageWarningThreshold, cfg.usageDangerThreshold)}  **${Math.round(limit.percent)}%** used\n`);
     const reset = fmtReset(limit.resetsAt);
     if (reset) { md.appendMarkdown(`${escapeMd(reset)}\n`); }
     md.appendMarkdown('\n');

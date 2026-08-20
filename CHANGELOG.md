@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Four settings: `showUsage` (default `true`), `usageWarningThreshold` (`50`),
   `usageDangerThreshold` (`75`), and `usageStaleMinutes` (`30`).
 - A one-time notification introducing the feature, with a "Turn off" action.
+- Usage bars are colour-coded by severity — blue while you have headroom, amber
+  past `usageWarningThreshold`, red past `usageDangerThreshold` — and the status
+  bar item takes a matching warning or error background.
 
 ### Changed
 - `CLAUDE_CONFIG_DIR` is honored when locating Claude Code's config, for setups
