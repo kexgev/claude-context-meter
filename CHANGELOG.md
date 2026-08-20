@@ -1,34 +1,28 @@
 # Changelog
 
-All notable changes to **Claude Usage Meter** are documented here.
+All notable changes to **Claude Code Usage Meter** are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [2.0.0] — 2026-08-20
 
-Renamed from **Claude Context Meter** to **Claude Usage Meter**. The extension
-outgrew its original name: it started as a context-window meter, and now covers
-subscription limits, cost, burn rate and spend as well. "Usage" describes what
-it actually reports.
+Renamed from **Claude Context Meter** to **Claude Code Usage Meter**, with a new logo.
+The extension outgrew its original name: it started as a context-window meter and
+now covers subscription limits, cost, burn rate and spend as well. "Usage"
+describes what it actually reports.
 
 ### Changed
-- **New name and identity.** The extension ID is now `kexgev.claude-usage-meter`.
-  This is a new Marketplace listing rather than an update to the old one, so it
-  does not arrive automatically — Claude Context Meter users need to install
-  Claude Usage Meter and can then uninstall the old extension.
-- **New logo** — a gauge, matching what the extension now measures.
-- **Settings and commands moved** from the `claudeContextMeter.*` namespace to
-  `claudeUsageMeter.*`. Existing `claudeContextMeter.*` values are still read as
-  a fallback, so settings carried over from Claude Context Meter keep working
-  without being re-entered. An explicitly set new key always takes precedence.
-  The old keys are read only — nothing is written back or migrated on disk.
+- **New name.** The extension now displays as Claude Code Usage Meter.
+- **New logo** — a gauge, matching what the extension measures.
 
-### Notes for people upgrading from Claude Context Meter
-- Everything from 1.6.0 and earlier is included; nothing was dropped.
-- Your thresholds, daily budget and project name overrides carry over.
-- Custom keybindings bound to `claudeContextMeter.*` commands need updating to
-  `claudeUsageMeter.*`; the command IDs changed with the namespace.
+### Unchanged
+This is a normal update, not a new extension — it arrives automatically and
+nothing needs reinstalling.
+- Settings keys stay on `claudeContextMeter.*`, so existing configuration keeps
+  working untouched.
+- Command IDs are unchanged, so custom keybindings keep working.
+- The extension ID stays `kexgev.claude-context-meter`.
 
 ## [1.6.0] — 2026-08-20
 
@@ -91,7 +85,7 @@ it actually reports.
 - **Spend Summary** command — total cost across every session (active *and* idle)
   for Today, This Week, or All Time, broken down per project, with a
   copy-to-clipboard markdown table.
-- **Daily budget alerts** — set `claudeUsageMeter.dailyBudget` to a USD amount
+- **Daily budget alerts** — set `claudeContextMeter.dailyBudget` to a USD amount
   and get a single warning the first time the day's total crosses it. Re-arms at
   midnight. Set to `0` (the default) to disable.
 - **Bedrock / Vertex AI / Foundry model IDs** are now displayed cleanly. IDs such
@@ -160,22 +154,22 @@ it actually reports.
 ## [1.1.0]
 
 ### Added
-- Custom Claude Usage Meter logo.
+- Custom Claude Code Usage Meter logo.
 
 ### Fixed
-- Renamed all settings and commands from `claudeContextBar` to `claudeUsageMeter`.
+- Renamed all settings and commands from `claudeContextBar` to `claudeContextMeter`.
 
 ## [1.0.0]
 
 - Initial release.
 
-[2.0.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v2.0.0
-[1.6.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.6.0
-[1.5.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.5.0
-[1.4.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.4.0
-[1.3.1]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.3.1
-[1.3.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.3.0
-[1.2.1]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.2.1
-[1.2.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.2.0
-[1.1.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.1.0
-[1.0.0]: https://github.com/kexgev/claude-usage-meter/releases/tag/v1.0.0
+[2.0.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v2.0.0
+[1.6.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.6.0
+[1.5.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.5.0
+[1.4.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.4.0
+[1.3.1]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.3.1
+[1.3.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.3.0
+[1.2.1]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.2.1
+[1.2.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.2.0
+[1.1.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.1.0
+[1.0.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.0.0

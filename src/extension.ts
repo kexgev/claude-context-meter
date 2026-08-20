@@ -39,7 +39,7 @@ function scheduleRefresh(): void {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  outputChannel = vscode.window.createOutputChannel('Claude Usage Meter');
+  outputChannel = vscode.window.createOutputChannel('Claude Code Usage Meter');
 
   statusBarMgr = new StatusBarManager(
     () => getConfig(),
@@ -47,13 +47,13 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsageMeter.hideSession', (sessionId: string) => {
+    vscode.commands.registerCommand('claudeContextMeter.hideSession', (sessionId: string) => {
       statusBarMgr.hideSession(sessionId);
     }),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsageMeter.copyStats', async () => {
+    vscode.commands.registerCommand('claudeContextMeter.copyStats', async () => {
       const sessions = statusBarMgr.getSessions();
       if (sessions.length === 0) {
         void vscode.window.showInformationMessage('No active Claude sessions.');
@@ -64,32 +64,32 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsageMeter.showDetail', (sessionId: string) => {
+    vscode.commands.registerCommand('claudeContextMeter.showDetail', (sessionId: string) => {
       void showSessionDetail(sessionId);
     }),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsageMeter.showSpendSummary', () => {
+    vscode.commands.registerCommand('claudeContextMeter.showSpendSummary', () => {
       void showSpendSummary();
     }),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsageMeter.showDiagnostics', () => {
+    vscode.commands.registerCommand('claudeContextMeter.showDiagnostics', () => {
       showDiagnostics(context);
     }),
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('claudeUsageMeter.showUsageDetail', () => {
+    vscode.commands.registerCommand('claudeContextMeter.showUsageDetail', () => {
       void showUsageDetail();
     }),
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('claudeUsageMeter') || e.affectsConfiguration(LEGACY_SECTION)) {
+      if (e.affectsConfiguration('claudeContextMeter')) {
         validateThresholds();
         scheduleRefresh();
         startUsageTimer();
@@ -281,7 +281,7 @@ async function checkBudget(): Promise<void> {
   if (total > config.dailyBudget) {
     lastBudgetAlertDate = today;
     void vscode.window.showWarningMessage(
-      `Claude Usage Meter: today's spend (~$${total.toFixed(2)}) has exceeded your daily budget of $${config.dailyBudget.toFixed(2)}.`,
+      `Claude Code Usage Meter: today's spend (~$${total.toFixed(2)}) has exceeded your daily budget of $${config.dailyBudget.toFixed(2)}.`,
     );
   }
 }
@@ -301,7 +301,7 @@ function showDiagnostics(context: vscode.ExtensionContext): void {
 
   const lines: string[] = [
     '─'.repeat(60),
-    'Claude Usage Meter — Diagnostics',
+    'Claude Code Usage Meter — Diagnostics',
     '─'.repeat(60),
     `Extension version : ${context.extension.packageJSON.version}`,
     `VS Code version   : ${vscode.version}`,
@@ -360,12 +360,12 @@ async function showWhatsNewIfUpdated(context: vscode.ExtensionContext): Promise<
   if (!previous || previous === current) { return; }
 
   const action = await vscode.window.showInformationMessage(
-    `Claude Usage Meter updated to ${current} — corrected pricing for current Claude models, plus spend summaries and daily budget alerts.`,
+    `Claude Code Usage Meter updated to ${current} — corrected pricing for current Claude models, plus spend summaries and daily budget alerts.`,
     'See what changed',
   );
   if (action === 'See what changed') {
     void vscode.env.openExternal(
-      vscode.Uri.parse('https://github.com/kexgev/claude-usage-meter/blob/master/CHANGELOG.md'),
+      vscode.Uri.parse('https://github.com/kexgev/claude-context-meter/blob/master/CHANGELOG.md'),
     );
   }
 }
@@ -439,7 +439,7 @@ async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promis
   await context.globalState.update('usageNoticeShown', true);
 
   const action = await vscode.window.showInformationMessage(
-    'Claude Usage Meter can show your Claude subscription limits. It reads the '
+    'Claude Code Usage Meter can show your Claude subscription limits. It reads the '
       + 'sign-in token Claude Code already stores on this machine and asks Anthropic '
       + 'for your current usage — the same request Claude Code makes for its own '
       + '/usage command. The token is sent only to Anthropic and is never stored or logged.',
@@ -447,7 +447,7 @@ async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promis
     'Local data only',
     'Turn off',
   );
-  const settings = vscode.workspace.getConfiguration('claudeUsageMeter');
+  const settings = vscode.workspace.getConfiguration('claudeContextMeter');
   if (action === 'Turn off') {
     await settings.update('showUsage', false, vscode.ConfigurationTarget.Global);
   } else if (action === 'Local data only') {
@@ -460,59 +460,29 @@ async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promis
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-/** Settings namespace used before the 2.0 rename. */
-const LEGACY_SECTION = 'claudeContextMeter';
-
-/**
- * Read a setting, falling back to the pre-2.0 `claudeContextMeter.*` namespace.
- *
- * The rename gave this extension a new identity, so anyone moving over from
- * Claude Context Meter still has their configuration stored under the old keys.
- * Reading those keeps their thresholds, budget and name overrides working
- * without a manual migration. An explicitly set new key always wins.
- */
-function pickSetting<T>(
-  cfg: vscode.WorkspaceConfiguration,
-  legacy: vscode.WorkspaceConfiguration,
-  key: string,
-  fallback: T,
-): T {
-  const isSet = (i: ReturnType<vscode.WorkspaceConfiguration['inspect']>): boolean =>
-    i?.globalValue !== undefined ||
-    i?.workspaceValue !== undefined ||
-    i?.workspaceFolderValue !== undefined;
-
-  if (isSet(cfg.inspect<T>(key))) { return cfg.get<T>(key, fallback); }
-  if (isSet(legacy.inspect<T>(key))) { return legacy.get<T>(key, fallback); }
-  return fallback;
-}
-
 function getConfig(): Config {
-  const cfg = vscode.workspace.getConfiguration('claudeUsageMeter');
-  const old = vscode.workspace.getConfiguration(LEGACY_SECTION);
-  const pick = <T>(key: string, fallback: T): T => pickSetting(cfg, old, key, fallback);
-
+  const cfg = vscode.workspace.getConfiguration('claudeContextMeter');
   return {
-    contextLimit: pick<number>('contextLimit', 200000),
-    idleTimeout: pick<number>('idleTimeout', 180),
-    warningThreshold: pick<number>('warningThreshold', 50),
-    dangerThreshold: pick<number>('dangerThreshold', 75),
-    compactMode: pick<boolean>('compactMode', false),
-    showEmoji: pick<boolean>('showEmoji', true),
-    autoColor: pick<boolean>('autoColor', true),
-    shortNames: pick<Record<string, string>>('shortNames', {}),
-    dailyBudget: pick<number>('dailyBudget', 0),
-    showUsage: pick<boolean>('showUsage', true),
-    usageWarningThreshold: pick<number>('usageWarningThreshold', 50),
-    usageDangerThreshold: pick<number>('usageDangerThreshold', 75),
-    usageStaleMinutes: pick<number>('usageStaleMinutes', 30),
-    usageLiveFetch: pick<boolean>('usageLiveFetch', true),
-    usageRefreshInterval: pick<number>('usageRefreshInterval', 60),
+    contextLimit: cfg.get<number>('contextLimit', 200000),
+    idleTimeout: cfg.get<number>('idleTimeout', 180),
+    warningThreshold: cfg.get<number>('warningThreshold', 50),
+    dangerThreshold: cfg.get<number>('dangerThreshold', 75),
+    compactMode: cfg.get<boolean>('compactMode', false),
+    showEmoji: cfg.get<boolean>('showEmoji', true),
+    autoColor: cfg.get<boolean>('autoColor', true),
+    shortNames: cfg.get<Record<string, string>>('shortNames', {}),
+    dailyBudget: cfg.get<number>('dailyBudget', 0),
+    showUsage: cfg.get<boolean>('showUsage', true),
+    usageWarningThreshold: cfg.get<number>('usageWarningThreshold', 50),
+    usageDangerThreshold: cfg.get<number>('usageDangerThreshold', 75),
+    usageStaleMinutes: cfg.get<number>('usageStaleMinutes', 30),
+    usageLiveFetch: cfg.get<boolean>('usageLiveFetch', true),
+    usageRefreshInterval: cfg.get<number>('usageRefreshInterval', 60),
   };
 }
 
 function validateThresholds(): void {
-  const cfg = vscode.workspace.getConfiguration('claudeUsageMeter');
+  const cfg = vscode.workspace.getConfiguration('claudeContextMeter');
   const w = cfg.get<number>('warningThreshold', 50);
   const d = cfg.get<number>('dangerThreshold', 75);
   if (w >= d) {

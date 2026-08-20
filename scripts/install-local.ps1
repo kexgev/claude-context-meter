@@ -31,7 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$ExtensionId = 'kexgev.claude-usage-meter'
+$ExtensionId = 'kexgev.claude-context-meter'
 $RepoRoot    = Split-Path -Parent $PSScriptRoot
 
 function Write-Step { param([string]$Message) Write-Host "==> $Message" -ForegroundColor Cyan }
@@ -47,7 +47,7 @@ try {
     $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
     Write-Step "Claude Usage Meter $version"
 
-    $vsix = Join-Path $RepoRoot "claude-usage-meter-$version.vsix"
+    $vsix = Join-Path $RepoRoot "claude-context-meter-$version.vsix"
 
     if (-not $SkipBuild) {
         Write-Step 'Compiling and packaging'

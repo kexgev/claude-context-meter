@@ -202,7 +202,7 @@ export function fetchLiveUsage(log: (msg: string) => void): Promise<UsageSnapsho
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json',
-          'User-Agent': 'claude-usage-meter',
+          'User-Agent': 'claude-context-meter',
         },
         timeout: REQUEST_TIMEOUT_MS,
       },

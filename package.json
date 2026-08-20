@@ -1,41 +1,55 @@
 {
-  "name": "claude-usage-meter",
-  "displayName": "Claude Usage Meter",
+  "name": "claude-context-meter",
+  "displayName": "Claude Code Usage Meter",
   "description": "Live Claude Code usage in your status bar — subscription session and weekly limits, context window, cost, burn rate, spend summaries, and budget alerts. Supports Claude Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and every future Claude model automatically.",
   "version": "2.0.0",
   "publisher": "kexgev",
   "keywords": [
     "claude",
     "claude code",
+    "claude ai",
     "anthropic",
     "context window",
+    "context meter",
+    "usage meter",
     "token usage",
+    "token counter",
+    "token limit",
     "cost tracker",
     "spend tracker",
+    "cost",
+    "burn rate",
     "budget alert",
+    "budget",
     "status bar",
+    "monitor",
     "ai",
+    "ai coding",
     "llm",
     "opus",
     "sonnet",
     "haiku",
+    "fable",
     "usage",
     "rate limit",
-    "subscription",
-    "budget"
+    "session limit",
+    "weekly limit",
+    "subscription"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/kexgev/claude-usage-meter"
+    "url": "https://github.com/kexgev/claude-context-meter"
   },
   "bugs": {
-    "url": "https://github.com/kexgev/claude-usage-meter/issues"
+    "url": "https://github.com/kexgev/claude-context-meter/issues"
   },
-  "homepage": "https://github.com/kexgev/claude-usage-meter#readme",
+  "homepage": "https://github.com/kexgev/claude-context-meter#readme",
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
+    "AI",
+    "Visualization",
     "Other"
   ],
   "activationEvents": [
@@ -45,94 +59,94 @@
   "icon": "media/icon.png",
   "contributes": {
     "configuration": {
-      "title": "Claude Usage Meter",
+      "title": "Claude Code Usage Meter",
       "properties": {
-        "claudeUsageMeter.contextLimit": {
+        "claudeContextMeter.contextLimit": {
           "type": "number",
           "default": 200000,
           "minimum": 1000,
           "maximum": 2000000,
           "description": "Fallback token limit when model is not detected"
         },
-        "claudeUsageMeter.idleTimeout": {
+        "claudeContextMeter.idleTimeout": {
           "type": "number",
           "default": 180,
           "minimum": 10,
           "maximum": 600,
           "description": "Seconds of inactivity before hiding a session"
         },
-        "claudeUsageMeter.warningThreshold": {
+        "claudeContextMeter.warningThreshold": {
           "type": "number",
           "default": 50,
           "minimum": 1,
           "maximum": 99,
           "description": "Percentage at which status bar turns yellow"
         },
-        "claudeUsageMeter.dangerThreshold": {
+        "claudeContextMeter.dangerThreshold": {
           "type": "number",
           "default": 75,
           "minimum": 2,
           "maximum": 100,
           "description": "Percentage at which status bar turns red"
         },
-        "claudeUsageMeter.compactMode": {
+        "claudeContextMeter.compactMode": {
           "type": "boolean",
           "default": false,
           "description": "Abbreviate project names in status bar"
         },
-        "claudeUsageMeter.showEmoji": {
+        "claudeContextMeter.showEmoji": {
           "type": "boolean",
           "default": true,
           "description": "Show project emoji in status bar"
         },
-        "claudeUsageMeter.autoColor": {
+        "claudeContextMeter.autoColor": {
           "type": "boolean",
           "default": true,
           "description": "Auto-assign pastel colors per project"
         },
-        "claudeUsageMeter.shortNames": {
+        "claudeContextMeter.shortNames": {
           "type": "object",
           "default": {},
           "description": "Custom name overrides: { \"projectName\": \"abbr\" }"
         },
-        "claudeUsageMeter.dailyBudget": {
+        "claudeContextMeter.dailyBudget": {
           "type": "number",
           "default": 0,
           "minimum": 0,
           "description": "Daily spend alert threshold in USD across all sessions (0 = disabled)"
         },
-        "claudeUsageMeter.showUsage": {
+        "claudeContextMeter.showUsage": {
           "type": "boolean",
           "default": true,
           "description": "Show Claude subscription usage (session and weekly limits) in the status bar"
         },
-        "claudeUsageMeter.usageWarningThreshold": {
+        "claudeContextMeter.usageWarningThreshold": {
           "type": "number",
           "default": 50,
           "minimum": 1,
           "maximum": 99,
           "description": "Subscription usage percentage at which the meter turns yellow"
         },
-        "claudeUsageMeter.usageDangerThreshold": {
+        "claudeContextMeter.usageDangerThreshold": {
           "type": "number",
           "default": 75,
           "minimum": 2,
           "maximum": 100,
           "description": "Subscription usage percentage at which the meter turns red"
         },
-        "claudeUsageMeter.usageStaleMinutes": {
+        "claudeContextMeter.usageStaleMinutes": {
           "type": "number",
           "default": 30,
           "minimum": 1,
           "maximum": 1440,
           "description": "Minutes after which the cached usage reading is marked stale"
         },
-        "claudeUsageMeter.usageLiveFetch": {
+        "claudeContextMeter.usageLiveFetch": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Fetch current subscription usage from Anthropic using the OAuth token Claude Code stores locally. This is the same request Claude Code makes for its own `/usage` command, and the token is sent only to Anthropic. Turn this off to avoid all network requests; usage then falls back to Claude Code’s local cache, which can be badly out of date."
         },
-        "claudeUsageMeter.usageRefreshInterval": {
+        "claudeContextMeter.usageRefreshInterval": {
           "type": "number",
           "default": 60,
           "minimum": 15,
@@ -143,34 +157,34 @@
     },
     "commands": [
       {
-        "command": "claudeUsageMeter.hideSession",
+        "command": "claudeContextMeter.hideSession",
         "title": "Hide Claude Session",
-        "category": "Claude Usage Meter"
+        "category": "Claude Code Usage Meter"
       },
       {
-        "command": "claudeUsageMeter.copyStats",
+        "command": "claudeContextMeter.copyStats",
         "title": "Copy Context Stats",
-        "category": "Claude Usage Meter"
+        "category": "Claude Code Usage Meter"
       },
       {
-        "command": "claudeUsageMeter.showDetail",
+        "command": "claudeContextMeter.showDetail",
         "title": "Show Session Detail",
-        "category": "Claude Usage Meter"
+        "category": "Claude Code Usage Meter"
       },
       {
-        "command": "claudeUsageMeter.showSpendSummary",
+        "command": "claudeContextMeter.showSpendSummary",
         "title": "Show Spend Summary",
-        "category": "Claude Usage Meter"
+        "category": "Claude Code Usage Meter"
       },
       {
-        "command": "claudeUsageMeter.showDiagnostics",
+        "command": "claudeContextMeter.showDiagnostics",
         "title": "Show Diagnostics",
-        "category": "Claude Usage Meter"
+        "category": "Claude Code Usage Meter"
       },
       {
-        "command": "claudeUsageMeter.showUsageDetail",
+        "command": "claudeContextMeter.showUsageDetail",
         "title": "Show Subscription Usage",
-        "category": "Claude Usage Meter"
+        "category": "Claude Code Usage Meter"
       }
     ]
   },
