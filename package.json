@@ -1,9 +1,25 @@
 {
   "name": "claude-context-meter",
   "displayName": "Claude Context Meter",
-  "description": "Instant token usage meter for Claude Code — ASCII progress bar, live file-watcher updates. Auto-detects 1M context for Opus/Sonnet 4.x+ (incl. Opus 4.8) and 200K for Haiku.",
-  "version": "1.4.0",
+  "description": "Live token usage, cost, and spend tracking for Claude Code — status bar meter, burn rate, daily budget alerts. Supports Claude Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and every future Claude model automatically.",
+  "version": "1.5.0",
   "publisher": "kexgev",
+  "keywords": [
+    "claude",
+    "claude code",
+    "anthropic",
+    "context window",
+    "token usage",
+    "cost tracker",
+    "spend tracker",
+    "budget alert",
+    "status bar",
+    "ai",
+    "llm",
+    "opus",
+    "sonnet",
+    "haiku"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/kexgev/claude-context-meter"
@@ -74,6 +90,12 @@
           "type": "object",
           "default": {},
           "description": "Custom name overrides: { \"projectName\": \"abbr\" }"
+        },
+        "claudeContextMeter.dailyBudget": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Daily spend alert threshold in USD across all sessions (0 = disabled)"
         }
       }
     },
@@ -86,6 +108,21 @@
       {
         "command": "claudeContextMeter.copyStats",
         "title": "Copy Context Stats",
+        "category": "Claude Context Meter"
+      },
+      {
+        "command": "claudeContextMeter.showDetail",
+        "title": "Show Session Detail",
+        "category": "Claude Context Meter"
+      },
+      {
+        "command": "claudeContextMeter.showSpendSummary",
+        "title": "Show Spend Summary",
+        "category": "Claude Context Meter"
+      },
+      {
+        "command": "claudeContextMeter.showDiagnostics",
+        "title": "Show Diagnostics",
         "category": "Claude Context Meter"
       }
     ]

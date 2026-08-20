@@ -32,6 +32,7 @@ export interface Config {
   showEmoji: boolean;
   autoColor: boolean;
   shortNames: Record<string, string>;
+  dailyBudget: number;
 }
 
 export interface SessionResult {

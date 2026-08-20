@@ -68,6 +68,15 @@ export function assignColor(projectPath: string, autoColor: boolean): string {
   return PALETTE[djb2Hash(normalized) % PALETTE.length];
 }
 
+/** Strip Bedrock/cross-region/Vertex decoration for display. Matching logic elsewhere (pricing, context limit) is untouched — this is display-only. */
+export function cleanModelName(model: string): string {
+  return model
+    .replace(/^(us|eu|apac)\.anthropic\./, '')
+    .replace(/^anthropic\./, '')
+    .replace(/-v\d+:\d+$/, '')
+    .replace(/@\d{8}$/, '');
+}
+
 export function abbreviateName(projectName: string, config: Config): string {
   if (!config.compactMode) { return projectName; }
 
@@ -101,7 +110,7 @@ function isAgentOrPlugin(projectPath: string): boolean {
 
 // ── Main scan function ────────────────────────────────────────────────────
 
-interface RawSession {
+export interface RawSession {
   filePath: string;
   projectPath: string;
   projectName: string;
@@ -114,20 +123,20 @@ interface RawSession {
 }
 
 /**
- * Scan all JSONL sessions in projectsDir.
+ * Walk every *.jsonl file under projectsDir and parse its latest token usage.
+ * Shared by scanSessions (live status bar, active-only) and the spend summary
+ * command (all sessions regardless of idle state).
  * @param now - injectable timestamp for testing; defaults to Date.now()
  */
-export async function scanSessions(
+export function walkRawSessions(
   projectsDir: string,
-  config: Config,
+  config: Pick<Config, 'idleTimeout' | 'contextLimit'>,
   log: (msg: string) => void,
   now?: number,
-): Promise<SessionResult> {
+): RawSession[] {
   const currentTime = now ?? Date.now();
-
   const rawSessions: RawSession[] = [];
 
-  // Discover all *.jsonl files
   let projectDirs: string[];
   try {
     projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true })
@@ -135,7 +144,7 @@ export async function scanSessions(
       .map(d => d.name);
   } catch (e) {
     log(`[warn] Cannot read projects dir: ${e}`);
-    return { sessions: [] };
+    return [];
   }
 
   for (const encodedDir of projectDirs) {
@@ -169,6 +178,22 @@ export async function scanSessions(
       rawSessions.push({ filePath, projectPath, projectName, id, mtime, tokens, model, tokenLimit, active });
     }
   }
+
+  return rawSessions;
+}
+
+/**
+ * Scan all JSONL sessions in projectsDir.
+ * @param now - injectable timestamp for testing; defaults to Date.now()
+ */
+export async function scanSessions(
+  projectsDir: string,
+  config: Config,
+  log: (msg: string) => void,
+  now?: number,
+): Promise<SessionResult> {
+  const rawSessions = walkRawSessions(projectsDir, config, log, now);
+  if (rawSessions.length === 0) { return { sessions: [] }; }
 
   // Supersession: find the single newest session per projectPath.
   // Tie-break equal mtimes by id (lexicographically larger wins) so that two

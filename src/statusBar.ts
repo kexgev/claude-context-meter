@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { SessionInfo, Config, TokenBreakdown } from './types';
-import { abbreviateName } from './sessionManager';
+import { abbreviateName, cleanModelName } from './sessionManager';
 
 /** 5-char Unicode progress bar. Each block = 20%. Used in status bar item text. */
 function buildBar5(pct: number): string {
@@ -44,17 +44,41 @@ function statusEmoji(pct: number, warn: number, danger: number): string {
   return '🟢 safe';
 }
 
-interface PricingRow { input: number; output: number; cacheRead: number; cacheWrite: number; }
+export interface PricingRow { input: number; output: number; cacheRead: number; cacheWrite: number; }
+
+/** cacheRead = 10% of input, cacheWrite = 125% of input — the ratio every current Claude model uses. */
+function rates(input: number, output: number): PricingRow {
+  return { input, output, cacheRead: input * 0.1, cacheWrite: input * 1.25 };
+}
 
 const PRICING: Array<{ pattern: string; rates: PricingRow }> = [
-  { pattern: 'claude-opus-4',    rates: { input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 } },
-  { pattern: 'claude-sonnet-4',  rates: { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 } },
-  { pattern: 'claude-haiku-4',   rates: { input:  0.80, output:  4.00, cacheRead: 0.08,  cacheWrite:  1.00 } },
-  { pattern: 'opus',             rates: { input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 } },
-  { pattern: 'sonnet',           rates: { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 } },
-  { pattern: 'haiku',            rates: { input:  0.80, output:  4.00, cacheRead: 0.08,  cacheWrite:  1.00 } },
+  // Top tier
+  { pattern: 'claude-fable-5',    rates: rates(10.00, 50.00) },
+  { pattern: 'claude-mythos-5',   rates: rates(10.00, 50.00) },
+  // Current-gen Opus (4.5 and up, incl. 5) — all $5/$25
+  { pattern: 'claude-opus-5',     rates: rates(5.00, 25.00) },
+  { pattern: 'claude-opus-4-8',   rates: rates(5.00, 25.00) },
+  { pattern: 'claude-opus-4-7',   rates: rates(5.00, 25.00) },
+  { pattern: 'claude-opus-4-6',   rates: rates(5.00, 25.00) },
+  { pattern: 'claude-opus-4-5',   rates: rates(5.00, 25.00) },
+  // Legacy Opus (4.0/4.1) — pre-price-cut $15/$75
+  { pattern: 'claude-opus-4-1',   rates: rates(15.00, 75.00) },
+  { pattern: 'claude-opus-4',     rates: rates(15.00, 75.00) },
+  // Sonnet — all current + recent gens are $3/$15
+  { pattern: 'claude-sonnet-5',   rates: rates(3.00, 15.00) },
+  { pattern: 'claude-sonnet-4',   rates: rates(3.00, 15.00) },
+  // Haiku
+  { pattern: 'claude-haiku-4-5',  rates: rates(1.00, 5.00) },
+  // Generic family fallbacks for future models not yet listed above.
+  // Opus/Haiku default to current-gen pricing (not legacy) — matches the
+  // trend of the last several releases and is the safer bet going forward.
+  { pattern: 'fable',             rates: rates(10.00, 50.00) },
+  { pattern: 'mythos',            rates: rates(10.00, 50.00) },
+  { pattern: 'opus',              rates: rates(5.00, 25.00) },
+  { pattern: 'sonnet',            rates: rates(3.00, 15.00) },
+  { pattern: 'haiku',             rates: rates(1.00, 5.00) },
 ];
-const PRICING_FALLBACK: PricingRow = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 };
+const PRICING_FALLBACK: PricingRow = rates(3.00, 15.00);
 
 /** Calculate USD cost for a token breakdown given a model string. Returns 0 if no tokens. */
 export function calcCost(tokens: TokenBreakdown, model: string): number {
@@ -66,6 +90,17 @@ export function calcCost(tokens: TokenBreakdown, model: string): number {
     tokens.cacheRead  * rates.cacheRead  +
     tokens.cacheWrite * rates.cacheWrite
   ) / 1_000_000;
+}
+
+/**
+ * Resolve which pricing row a model string matches, and under what name.
+ * Exported for the diagnostics command so users can see why a cost looks the way it does.
+ */
+export function describePricing(model: string): { tier: string; rates: PricingRow } {
+  const match = PRICING.find(p => model.toLowerCase().includes(p.pattern));
+  return match
+    ? { tier: match.pattern, rates: match.rates }
+    : { tier: 'fallback (model not recognized)', rates: PRICING_FALLBACK };
 }
 
 /** Format a USD cost value for display. Returns empty string if cost === 0. */
@@ -265,7 +300,7 @@ export class StatusBarManager {
     const status = statusEmoji(session.pct, cfg.warningThreshold, cfg.dangerThreshold);
 
     md.appendMarkdown(`**${escapeMd(session.projectName)}**\n\n`);
-    md.appendMarkdown(`\`${escapeCode(session.model || 'unknown')}\`  ·  ${status} · ${session.pct}%\n\n`);
+    md.appendMarkdown(`\`${escapeCode(cleanModelName(session.model) || 'unknown')}\`  ·  ${status} · ${session.pct}%\n\n`);
     md.appendMarkdown(`${bar20}  ${session.pct}%\n`);
     md.appendMarkdown(`${tokens.total.toLocaleString()} / ${session.tokenLimit.toLocaleString()} tokens\n\n`);
     md.appendMarkdown(`---\n\n`);
