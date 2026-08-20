@@ -1,18 +1,20 @@
-# Claude Context Meter
+# Claude Usage Meter
 
-A minimal VS Code extension that shows your Claude Code token usage as an ASCII progress bar directly in the status bar — updates instantly via file watcher, zero polling. Also shows live cost and burn rate per session.
+A VS Code extension that puts your Claude Code usage in the status bar: subscription session and weekly limits, context window fill, cost, and burn rate — updating live via file watcher, no polling.
 
-## What's new in 1.6.0
+## What's new in 2.0.0
 
-**Subscription usage.** The meter now shows your Claude session (5-hour) and weekly limits right in the status bar — the same numbers `/usage` reports in Claude Code.
+**Claude Context Meter is now Claude Usage Meter**, with a new logo. The extension started as a context-window meter; it now tracks subscription limits, cost, burn rate and spend too, so the name follows what it actually does.
+
+Coming from Claude Context Meter? This is a separate listing, so install this one and uninstall the old extension. Your existing settings are read automatically — nothing to re-enter. Custom keybindings need repointing from `claudeContextMeter.*` to `claudeUsageMeter.*`.
+
+**Subscription usage** (added in 1.6.0) shows your Claude session (5-hour) and weekly limits in the status bar, matching what `/usage` reports in Claude Code:
 
 ```
 ⏱ Usage 45% · 6%w        🤖 my-project ███░░ 16% ~$1.20 🔥2.1k/m
 ```
 
-Hover for every limit with its reset time. See [Subscription usage](#subscription-usage) below.
-
-Earlier in 1.5.0: corrected pricing for current Claude models, spend summaries, and daily budget alerts — full history in the [changelog](CHANGELOG.md).
+Crossing a threshold raises a one-time notification, so a cap that stops your work doesn't arrive unannounced. Full history in the [changelog](CHANGELOG.md).
 
 ## Status bar
 
@@ -88,24 +90,24 @@ Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes
 
 Claude Code also caches its last usage response in `~/.claude.json`, and that cache is used as a fallback whenever the request fails — offline, rate-limited, expired token, or the endpoint changing. **The cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%. So cached readings are labelled as cached, and flagged with `⚠` once older than `usageStaleMinutes`, rather than being presented as current.
 
-To avoid network requests entirely, set `claudeContextMeter.usageLiveFetch` to `false`. Usage then comes from the local cache alone — accepting that it will often be out of date.
+To avoid network requests entirely, set `claudeUsageMeter.usageLiveFetch` to `false`. Usage then comes from the local cache alone — accepting that it will often be out of date.
 
 > **Note:** this endpoint is undocumented. It may change or stop working at Anthropic's discretion, in which case the meter falls back to the cache rather than erroring.
 
-If you use an API key rather than a Claude subscription there is no usage data, and the item simply doesn't appear. Set `claudeContextMeter.showUsage` to `false` to hide it.
+If you use an API key rather than a Claude subscription there is no usage data, and the item simply doesn't appear. Set `claudeUsageMeter.showUsage` to `false` to hide it.
 
 ## Commands
 
 Available from the Command Palette (`Ctrl/Cmd+Shift+P`):
-- **Claude Context Meter: Copy Context Stats** — copy a markdown table of all active sessions to the clipboard
-- **Claude Context Meter: Show Spend Summary** — pick Today / This Week / All Time and see total cost across every session (active or idle), with a per-project breakdown you can copy as markdown
-- **Claude Context Meter: Show Session Detail** — same quick menu you get by clicking a status bar item (Hide / Open transcript / Copy stats)
-- **Claude Context Meter: Show Subscription Usage** — list every plan limit with its reset time
-- **Claude Context Meter: Show Diagnostics** — running version, detected model, resolved pricing tier and rates, context limit, and transcript paths. Handy when reporting an issue
+- **Claude Usage Meter: Copy Context Stats** — copy a markdown table of all active sessions to the clipboard
+- **Claude Usage Meter: Show Spend Summary** — pick Today / This Week / All Time and see total cost across every session (active or idle), with a per-project breakdown you can copy as markdown
+- **Claude Usage Meter: Show Session Detail** — same quick menu you get by clicking a status bar item (Hide / Open transcript / Copy stats)
+- **Claude Usage Meter: Show Subscription Usage** — list every plan limit with its reset time
+- **Claude Usage Meter: Show Diagnostics** — running version, detected model, resolved pricing tier and rates, context limit, and transcript paths. Handy when reporting an issue
 
 ## Budget alerts
 
-Set `claudeContextMeter.dailyBudget` to a USD amount and you'll get a one-time warning notification the first time that day's total spend (across all sessions) crosses it. Re-arms automatically at midnight. Default `0` disables it.
+Set `claudeUsageMeter.dailyBudget` to a USD amount and you'll get a one-time warning notification the first time that day's total spend (across all sessions) crosses it. Re-arms automatically at midnight. Default `0` disables it.
 
 ## How it works
 
@@ -129,19 +131,19 @@ Unrecognized non-Claude models fall back to the `contextLimit` setting.
 
 ### From the Marketplace (recommended)
 
-Install **[Claude Context Meter](https://marketplace.visualstudio.com/items?itemName=Kexgev.claude-context-meter)** from the VS Code Marketplace, or search "Claude Context Meter" in the Extensions panel (`Ctrl/Cmd+Shift+X`). Updates arrive automatically.
+Install **[Claude Usage Meter](https://marketplace.visualstudio.com/items?itemName=Kexgev.claude-usage-meter)** from the VS Code Marketplace, or search "Claude Usage Meter" in the Extensions panel (`Ctrl/Cmd+Shift+X`). Updates arrive automatically.
 
 ### From VSIX
 
 Use this if you're on VSCodium, Cursor, or another build without Marketplace access — or if you're testing a pre-release build.
 
-1. Download the latest `.vsix` from [Releases](https://github.com/kexgev/claude-context-meter/releases)
+1. Download the latest `.vsix` from [Releases](https://github.com/kexgev/claude-usage-meter/releases)
 2. In VS Code: `Extensions` → `···` → `Install from VSIX`
 3. **Click "Reload Now"** when prompted, or run `Developer: Reload Window`. Without a reload the old version keeps running and the install looks like it did nothing.
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-1.6.0.vsix --force
+code --install-extension claude-usage-meter-2.0.0.vsix --force
 ```
 
 > **Heads up:** VS Code *pins* extensions installed from a `.vsix`, which turns off
@@ -150,19 +152,19 @@ code --install-extension claude-context-meter-1.6.0.vsix --force
 > this is the extension **ID**, not a file path:
 >
 > ```bash
-> code --install-extension kexgev.claude-context-meter
+> code --install-extension kexgev.claude-usage-meter
 > ```
 
-Run **Claude Context Meter: Show Diagnostics** from the Command Palette at any time to confirm which version is actually active.
+Run **Claude Usage Meter: Show Diagnostics** from the Command Palette at any time to confirm which version is actually active.
 
 ### Build from source
 
 ```bash
-git clone https://github.com/kexgev/claude-context-meter.git
-cd claude-context-meter
+git clone https://github.com/kexgev/claude-usage-meter.git
+cd claude-usage-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-1.6.0.vsix --force
+code --install-extension claude-usage-meter-2.0.0.vsix --force
 ```
 
 On Windows, `./scripts/install-local.ps1` does the build, install, registration check, and stale-folder cleanup in one step.
@@ -176,21 +178,21 @@ On Windows, `./scripts/install-local.ps1` does the build, install, registration 
 
 | Setting | Default | Description |
 |---|---|---|
-| `claudeContextMeter.contextLimit` | `200000` | Fallback token limit when model is not auto-detected |
-| `claudeContextMeter.idleTimeout` | `180` | Seconds of inactivity before hiding a session |
-| `claudeContextMeter.warningThreshold` | `50` | % at which the bar turns yellow |
-| `claudeContextMeter.dangerThreshold` | `75` | % at which the bar turns red |
-| `claudeContextMeter.compactMode` | `false` | Abbreviate long project names (e.g. `my-cool-project` → `MCP`) |
-| `claudeContextMeter.showEmoji` | `true` | Show project emoji prefix |
-| `claudeContextMeter.autoColor` | `true` | Auto-assign a unique pastel color per project |
-| `claudeContextMeter.shortNames` | `{}` | Custom name overrides e.g. `{ "my-project": "MP" }` |
-| `claudeContextMeter.dailyBudget` | `0` | Daily spend alert threshold in USD across all sessions (`0` = disabled) |
-| `claudeContextMeter.showUsage` | `true` | Show Claude subscription usage (session and weekly limits) |
-| `claudeContextMeter.usageWarningThreshold` | `50` | Subscription usage % at which the meter turns yellow |
-| `claudeContextMeter.usageDangerThreshold` | `75` | Subscription usage % at which the meter turns red |
-| `claudeContextMeter.usageStaleMinutes` | `30` | Minutes after which a cached usage reading is marked stale |
-| `claudeContextMeter.usageLiveFetch` | `true` | Fetch current usage from Anthropic. `false` uses the local cache only, with no network requests |
-| `claudeContextMeter.usageRefreshInterval` | `60` | Seconds between usage refreshes |
+| `claudeUsageMeter.contextLimit` | `200000` | Fallback token limit when model is not auto-detected |
+| `claudeUsageMeter.idleTimeout` | `180` | Seconds of inactivity before hiding a session |
+| `claudeUsageMeter.warningThreshold` | `50` | % at which the bar turns yellow |
+| `claudeUsageMeter.dangerThreshold` | `75` | % at which the bar turns red |
+| `claudeUsageMeter.compactMode` | `false` | Abbreviate long project names (e.g. `my-cool-project` → `MCP`) |
+| `claudeUsageMeter.showEmoji` | `true` | Show project emoji prefix |
+| `claudeUsageMeter.autoColor` | `true` | Auto-assign a unique pastel color per project |
+| `claudeUsageMeter.shortNames` | `{}` | Custom name overrides e.g. `{ "my-project": "MP" }` |
+| `claudeUsageMeter.dailyBudget` | `0` | Daily spend alert threshold in USD across all sessions (`0` = disabled) |
+| `claudeUsageMeter.showUsage` | `true` | Show Claude subscription usage (session and weekly limits) |
+| `claudeUsageMeter.usageWarningThreshold` | `50` | Subscription usage % at which the meter turns yellow |
+| `claudeUsageMeter.usageDangerThreshold` | `75` | Subscription usage % at which the meter turns red |
+| `claudeUsageMeter.usageStaleMinutes` | `30` | Minutes after which a cached usage reading is marked stale |
+| `claudeUsageMeter.usageLiveFetch` | `true` | Fetch current usage from Anthropic. `false` uses the local cache only, with no network requests |
+| `claudeUsageMeter.usageRefreshInterval` | `60` | Seconds between usage refreshes |
 
 ## License
 

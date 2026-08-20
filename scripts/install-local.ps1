@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build, package, and install Claude Context Meter locally, then verify it registered.
+    Build, package, and install Claude Usage Meter locally, then verify it registered.
 
 .DESCRIPTION
     Installing a .vsix while VS Code is running can leave the new version extracted on
@@ -31,7 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$ExtensionId = 'kexgev.claude-context-meter'
+$ExtensionId = 'kexgev.claude-usage-meter'
 $RepoRoot    = Split-Path -Parent $PSScriptRoot
 
 function Write-Step { param([string]$Message) Write-Host "==> $Message" -ForegroundColor Cyan }
@@ -45,9 +45,9 @@ if (-not (Get-Command code -ErrorAction SilentlyContinue)) {
 Push-Location $RepoRoot
 try {
     $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-    Write-Step "Claude Context Meter $version"
+    Write-Step "Claude Usage Meter $version"
 
-    $vsix = Join-Path $RepoRoot "claude-context-meter-$version.vsix"
+    $vsix = Join-Path $RepoRoot "claude-usage-meter-$version.vsix"
 
     if (-not $SkipBuild) {
         Write-Step 'Compiling and packaging'

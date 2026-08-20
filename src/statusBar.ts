@@ -226,7 +226,7 @@ export class StatusBarManager {
       // Step 2: fire notifications
       const fired = this.notified.get(session.id) ?? new Set<'warn' | 'crit'>();
       const msg = (pct: number) =>
-        `Claude Context Meter: ${session.projectName} is at ${pct}% context (${session.tokens.total.toLocaleString()}/${session.tokenLimit.toLocaleString()} tokens)`;
+        `Claude Usage Meter: ${session.projectName} is at ${pct}% context (${session.tokens.total.toLocaleString()}/${session.tokenLimit.toLocaleString()} tokens)`;
 
       if (session.pct >= cfg.dangerThreshold && !fired.has('crit')) {
         void vscode.window.showErrorMessage(msg(session.pct));
@@ -280,7 +280,7 @@ export class StatusBarManager {
       if (!item) {
         item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         item.command = {
-          command: 'claudeContextMeter.showDetail',
+          command: 'claudeUsageMeter.showDetail',
           arguments: [session.id],
           title: 'Show session detail',
         };
@@ -374,7 +374,7 @@ export class StatusBarManager {
 
     if (!this.usageItem) {
       this.usageItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-      this.usageItem.command = { command: 'claudeContextMeter.showUsageDetail', title: 'Show subscription usage' };
+      this.usageItem.command = { command: 'claudeUsageMeter.showUsageDetail', title: 'Show subscription usage' };
     }
 
     const session = peakOf(usage, 'session');

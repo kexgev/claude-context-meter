@@ -13,3 +13,5 @@ tsconfig.json
 node_modules/**
 package-lock.json
 scripts/**
+media/icon-128.png
+media/icon-512.png
