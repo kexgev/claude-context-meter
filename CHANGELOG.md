@@ -53,14 +53,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Transcript file paths on Windows.
 - Tooltip rendering and file-watcher reliability.
 
+## [1.3.1]
+
+### Added
+- `bugs` and `homepage` URLs so the Marketplace listing shows Repository,
+  Issues, and Homepage in its Resources sidebar. No runtime changes.
+
 ## [1.3.0]
 
 ### Added
-- Claude Opus 4.8 support; future Claude models default to a 1M context window.
+- Claude Opus 4.8 support. Future Claude models now default to a 1M context
+  window, so new releases work without an extension update.
 
 ### Fixed
-- Corrected context windows for Opus 4.7 and Sonnet 4.6.
 - Resolved 8 high-severity vulnerabilities in devDependencies.
+
+## [1.2.1]
+
+### Fixed
+- Opus 4.7 is now correctly detected as 1M context (previously fell back to
+  the 200k default).
+- Corrected the Sonnet 4.6 context window.
+- Added Sonnet 4.7 detection.
 
 ## [1.2.0]
 
@@ -85,9 +99,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
-[1.5.0]: https://github.com/kexgev/claude-context-meter/releases
-[1.4.0]: https://github.com/kexgev/claude-context-meter/releases
-[1.3.0]: https://github.com/kexgev/claude-context-meter/releases
-[1.2.0]: https://github.com/kexgev/claude-context-meter/releases
-[1.1.0]: https://github.com/kexgev/claude-context-meter/releases
-[1.0.0]: https://github.com/kexgev/claude-context-meter/releases
+[1.5.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.5.0
+[1.4.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.4.0
+[1.3.1]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.3.1
+[1.3.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.3.0
+[1.2.1]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.2.1
+[1.2.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.2.0
+[1.1.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.1.0
+[1.0.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.0.0
