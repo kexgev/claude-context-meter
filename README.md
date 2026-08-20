@@ -80,6 +80,8 @@ Resets Aug 24, 3:59pm
 Updated 2 min ago
 ```
 
+Crossing a threshold raises a one-time notification per limit, so a cap that stops your work doesn't arrive unannounced. Each limit alerts at most once per window and re-arms when that window resets. Alerts only fire on live readings — a stale cached figure never triggers one.
+
 ### How it works
 
 Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`, or the OS credential store). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. Refreshes every `usageRefreshInterval` seconds (default 60).

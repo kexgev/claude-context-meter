@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failure path degrades to the cache rather than erroring. Users on an API key
   rather than a subscription have no usage data, and the item stays hidden.
 
+- **Threshold notifications for subscription limits.** Crossing
+  `usageWarningThreshold` or `usageDangerThreshold` raises a one-time
+  notification per limit, since hitting a cap stops work outright and a silent
+  colour change is easy to miss. Each limit alerts at most once per window,
+  keyed by limit kind and reset time so a new window re-arms on its own, and
+  alerts fire only on live readings — never on a stale cached figure.
 - **Show Subscription Usage** command — lists every plan limit with its reset time.
 - Settings: `showUsage` (default `true`), `usageWarningThreshold` (`50`),
   `usageDangerThreshold` (`75`), `usageStaleMinutes` (`30`),

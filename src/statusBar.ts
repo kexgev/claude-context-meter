@@ -190,6 +190,9 @@ export class StatusBarManager {
   // rather than being folded into the per-project meters.
   private usageItem: vscode.StatusBarItem | undefined;
   private lastUsage: UsageSnapshot | null = null;
+  // Key is limit kind + reset timestamp, so each new window re-arms on its own
+  // instead of staying silent after one alert.
+  private readonly usageNotified = new Map<string, Set<'warn' | 'crit'>>();
 
   constructor(
     private readonly getConfig: () => Config,
@@ -343,6 +346,7 @@ export class StatusBarManager {
     this.usageItem?.dispose();
     this.usageItem = undefined;
     this.lastUsage = null;
+    this.usageNotified.clear();
     this.readings.clear();
     this.notified.clear();
     this.lastSessions = [];
@@ -396,6 +400,44 @@ export class StatusBarManager {
     }
 
     this.usageItem.show();
+    this.notifyUsage(usage, cfg);
+  }
+
+  /**
+   * Warn once per limit per window. Subscription caps stop work outright when
+   * reached, so going red silently is not enough — but the meter refreshes
+   * every 60s and must not nag on every tick.
+   */
+  private notifyUsage(usage: UsageSnapshot, cfg: Config): void {
+    if (usage.source !== 'live') { return; } // never alert on a stale cached number
+
+    for (const limit of usage.limits) {
+      const key = `${limit.kind}:${limit.resetsAt?.getTime() ?? 'none'}`;
+      const fired = this.usageNotified.get(key) ?? new Set<'warn' | 'crit'>();
+      const reset = limit.resetsAt ? ` Resets ${fmtReset(limit.resetsAt).replace(/^Resets /, '')}.` : '';
+
+      if (limit.percent >= cfg.usageDangerThreshold && !fired.has('crit')) {
+        fired.add('warn'); // suppress a late warn if we jumped straight past danger
+        fired.add('crit');
+        this.usageNotified.set(key, fired);
+        void vscode.window.showErrorMessage(
+          `Claude ${limit.label.toLowerCase()} limit at ${Math.round(limit.percent)}%.${reset}`,
+        );
+      } else if (limit.percent >= cfg.usageWarningThreshold && !fired.has('warn')) {
+        fired.add('warn');
+        this.usageNotified.set(key, fired);
+        void vscode.window.showWarningMessage(
+          `Claude ${limit.label.toLowerCase()} limit at ${Math.round(limit.percent)}%.${reset}`,
+        );
+      }
+    }
+
+    // Drop keys for windows that have already reset, so the map cannot grow
+    // without bound across a long-running session.
+    const liveKeys = new Set(usage.limits.map(l => `${l.kind}:${l.resetsAt?.getTime() ?? 'none'}`));
+    for (const key of this.usageNotified.keys()) {
+      if (!liveKeys.has(key)) { this.usageNotified.delete(key); }
+    }
   }
 
   private buildTooltip(session: SessionInfo, cfg: Config): vscode.MarkdownString {
