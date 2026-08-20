@@ -10,7 +10,7 @@ A minimal VS Code extension that shows your Claude Code token usage as an ASCII 
 ⏱ Usage 45% · 6%w        🤖 my-project ███░░ 16% ~$1.20 🔥2.1k/m
 ```
 
-It reads Claude Code's own local usage cache, so there is **no account access, no sign-in, and no network requests**. Hover for every limit with its reset time. See [Subscription usage](#subscription-usage) below.
+Hover for every limit with its reset time. See [Subscription usage](#subscription-usage) below.
 
 Earlier in 1.5.0: corrected pricing for current Claude models, spend summaries, and daily budget alerts — full history in the [changelog](CHANGELOG.md).
 
@@ -80,11 +80,17 @@ Resets Aug 24, 3:59pm
 Updated 2 min ago
 ```
 
-**How it works.** Claude Code keeps a local cache of your usage in `~/.claude.json`; this extension reads that file. There is no sign-in, no token, no account access, and no network request — it is the same local-file approach used for the context meter itself.
+### How it works
 
-Because it is a cache, it only refreshes while Claude Code is running. If a reading gets old it is marked stale (`⚠`) rather than shown as though it were current; `usageStaleMinutes` controls that cutoff.
+Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`, or the OS credential store). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. Refreshes every `usageRefreshInterval` seconds (default 60).
 
-If you use an API key rather than a Claude subscription, there is no usage data and the item simply doesn't appear. Set `claudeContextMeter.showUsage` to `false` to hide it.
+Claude Code also caches its last usage response in `~/.claude.json`, and that cache is used as a fallback whenever the request fails — offline, rate-limited, expired token, or the endpoint changing. **The cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%. So cached readings are labelled as cached, and flagged with `⚠` once older than `usageStaleMinutes`, rather than being presented as current.
+
+To avoid network requests entirely, set `claudeContextMeter.usageLiveFetch` to `false`. Usage then comes from the local cache alone — accepting that it will often be out of date.
+
+> **Note:** this endpoint is undocumented. It may change or stop working at Anthropic's discretion, in which case the meter falls back to the cache rather than erroring.
+
+If you use an API key rather than a Claude subscription there is no usage data, and the item simply doesn't appear. Set `claudeContextMeter.showUsage` to `false` to hide it.
 
 ## Commands
 
@@ -181,6 +187,8 @@ On Windows, `./scripts/install-local.ps1` does the build, install, registration 
 | `claudeContextMeter.usageWarningThreshold` | `50` | Subscription usage % at which the meter turns yellow |
 | `claudeContextMeter.usageDangerThreshold` | `75` | Subscription usage % at which the meter turns red |
 | `claudeContextMeter.usageStaleMinutes` | `30` | Minutes after which a cached usage reading is marked stale |
+| `claudeContextMeter.usageLiveFetch` | `true` | Fetch current usage from Anthropic. `false` uses the local cache only, with no network requests |
+| `claudeContextMeter.usageRefreshInterval` | `60` | Seconds between usage refreshes |
 
 ## License
 

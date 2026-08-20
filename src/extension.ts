@@ -7,7 +7,7 @@ import { Config, SessionInfo } from './types';
 import { scanSessions, cleanModelName } from './sessionManager';
 import { StatusBarManager, calcCost, fmtCost, describePricing } from './statusBar';
 import { scanAllSessionsForSpend, filterByRange, summarize, SpendRange } from './spendSummary';
-import { resolveClaudeConfigPath, readUsageSnapshot, formatAge } from './subscriptionUsage';
+import { resolveClaudeConfigPath, readCachedUsage, getUsageSnapshot, formatAge } from './subscriptionUsage';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarMgr: StatusBarManager;
@@ -21,6 +21,7 @@ const REFRESH_DEBOUNCE_MS = 150;
 const BUDGET_CHECK_INTERVAL_MS = 60_000;
 
 let budgetCheckTimer: ReturnType<typeof setInterval> | undefined;
+let usageTimer: ReturnType<typeof setInterval> | undefined;
 let lastBudgetAlertDate: string | undefined;
 
 /**
@@ -91,6 +92,8 @@ export function activate(context: vscode.ExtensionContext): void {
       if (e.affectsConfiguration('claudeContextMeter')) {
         validateThresholds();
         scheduleRefresh();
+        startUsageTimer();
+        void refreshUsage();
       }
     }),
   );
@@ -99,22 +102,34 @@ export function activate(context: vscode.ExtensionContext): void {
   setupWatcher(context);
   void refresh();
 
-  // Also re-render usage on a timer. The file watchers only fire while Claude
-  // Code is writing, so without this the staleness marker would never appear
-  // in exactly the case it matters: Claude Code not running at all.
-  budgetCheckTimer = setInterval(() => {
-    refreshUsage();
-    void checkBudget();
-  }, BUDGET_CHECK_INTERVAL_MS);
+  budgetCheckTimer = setInterval(() => void checkBudget(), BUDGET_CHECK_INTERVAL_MS);
   context.subscriptions.push({ dispose: () => clearInterval(budgetCheckTimer) });
   void checkBudget();
+
+  // Usage polls on its own cadence, independent of file activity: the numbers
+  // move because of work on any machine, not because this one wrote a file.
+  startUsageTimer();
+  context.subscriptions.push({ dispose: () => stopUsageTimer() });
+  void refreshUsage();
 
   void showWhatsNewIfUpdated(context);
   void showUsageNoticeIfNeeded(context);
 }
 
+/** (Re)start the usage poll. Interval changes take effect without a reload. */
+function startUsageTimer(): void {
+  stopUsageTimer();
+  const seconds = Math.max(15, getConfig().usageRefreshInterval);
+  usageTimer = setInterval(() => void refreshUsage(), seconds * 1000);
+}
+
+function stopUsageTimer(): void {
+  if (usageTimer) { clearInterval(usageTimer); usageTimer = undefined; }
+}
+
 export function deactivate(): void {
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = undefined; }
+  stopUsageTimer();
   if (budgetCheckTimer) { clearInterval(budgetCheckTimer); budgetCheckTimer = undefined; }
   watcher?.dispose();
   statusBarMgr?.dispose();
@@ -362,9 +377,24 @@ async function showWhatsNewIfUpdated(context: vscode.ExtensionContext): Promise<
  * A null result (missing file, mid-write, or no subscription) leaves the last
  * good snapshot on screen rather than making the item disappear.
  */
-function refreshUsage(): void {
-  const snapshot = readUsageSnapshot(resolveClaudeConfigPath(), msg => outputChannel.appendLine(msg));
+async function refreshUsage(): Promise<void> {
+  const cfg = getConfig();
+  const snapshot = await getUsageSnapshot(
+    resolveClaudeConfigPath(),
+    cfg.usageLiveFetch,
+    msg => outputChannel.appendLine(msg),
+  );
   statusBarMgr.updateUsage(snapshot);
+}
+
+/**
+ * Cheap, synchronous cache read. Used on the file-watcher path so a burst of
+ * writes cannot trigger a burst of network requests; the live fetch runs on
+ * its own timer instead.
+ */
+function refreshUsageFromCache(): void {
+  if (statusBarMgr.getUsage()?.source === 'live') { return; } // never downgrade live data
+  statusBarMgr.updateUsage(readCachedUsage(resolveClaudeConfigPath()));
 }
 
 /** Click handler for the subscription meter: list every reported limit. */
@@ -397,9 +427,9 @@ async function showUsageDetail(): Promise<void> {
 }
 
 /**
- * Announce the usage meter once. The numbers come from a local cache rather
- * than any account access, so this is a feature announcement rather than a
- * consent prompt — but users should still know where they come from.
+ * Announce the usage meter once, before it can quietly start using the user's
+ * OAuth token. This is a consent prompt, not just a feature announcement, so
+ * it states plainly what is read and where it is sent.
  */
 async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promise<void> {
   if (context.globalState.get<boolean>('usageNoticeShown')) { return; }
@@ -409,14 +439,22 @@ async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promis
   await context.globalState.update('usageNoticeShown', true);
 
   const action = await vscode.window.showInformationMessage(
-    "Claude Context Meter now shows your Claude subscription limits, read from Claude Code's local usage cache. No account access required.",
+    'Claude Context Meter can show your Claude subscription limits. It reads the '
+      + 'sign-in token Claude Code already stores on this machine and asks Anthropic '
+      + 'for your current usage — the same request Claude Code makes for its own '
+      + '/usage command. The token is sent only to Anthropic and is never stored or logged.',
     'Got it',
+    'Local data only',
     'Turn off',
   );
+  const settings = vscode.workspace.getConfiguration('claudeContextMeter');
   if (action === 'Turn off') {
-    await vscode.workspace
-      .getConfiguration('claudeContextMeter')
-      .update('showUsage', false, vscode.ConfigurationTarget.Global);
+    await settings.update('showUsage', false, vscode.ConfigurationTarget.Global);
+  } else if (action === 'Local data only') {
+    await settings.update('usageLiveFetch', false, vscode.ConfigurationTarget.Global);
+    void vscode.window.showInformationMessage(
+      "Usage will use Claude Code's local cache only. It refreshes infrequently, so the figures can lag well behind reality.",
+    );
   }
 }
 
@@ -438,6 +476,8 @@ function getConfig(): Config {
     usageWarningThreshold: cfg.get<number>('usageWarningThreshold', 50),
     usageDangerThreshold: cfg.get<number>('usageDangerThreshold', 75),
     usageStaleMinutes: cfg.get<number>('usageStaleMinutes', 30),
+    usageLiveFetch: cfg.get<boolean>('usageLiveFetch', true),
+    usageRefreshInterval: cfg.get<number>('usageRefreshInterval', 60),
   };
 }
 
@@ -477,7 +517,7 @@ async function refresh(): Promise<void> {
     }
 
     statusBarMgr.update(result.sessions);
-    refreshUsage();
+    refreshUsageFromCache();
   } catch (err) {
     outputChannel.appendLine(`[error] Refresh failed: ${err}`);
   }

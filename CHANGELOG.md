@@ -8,29 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] — 2026-08-20
 
 ### Added
-- **Subscription usage meter.** A new status bar item showing your Claude plan's
+- **Subscription usage meter.** A status bar item showing your Claude plan's
   session (5-hour) and weekly limits — the same figures Claude Code's `/usage`
-  command reports. It colors yellow then red as you approach a limit, and the
-  hover lists every limit your plan reports along with its reset time.
+  command reports. Bars are colour-coded by severity: blue with headroom, amber
+  past `usageWarningThreshold`, red past `usageDangerThreshold`. The status bar
+  item takes a matching warning or error background, driven by whichever limit
+  is worst so a nearly-full weekly cap cannot hide behind a fresh session window.
+  The hover lists every limit your plan reports with its reset time.
 
-  The data comes from Claude Code's own local usage cache in `~/.claude.json`.
-  No sign-in, no token, no account access, and no network requests are involved.
-  Because it is a cache it only refreshes while Claude Code is running, so a
-  reading older than `usageStaleMinutes` is marked stale rather than presented
-  as current. Users on an API key rather than a subscription have no usage data,
-  and the item stays hidden for them.
+  Figures come from `GET /api/oauth/usage`, the same request Claude Code makes
+  for `/usage`, authenticated with the sign-in token Claude Code already stores
+  locally. That token is used only as the request's `Authorization` header, is
+  sent only to Anthropic, and is never stored or logged. Refreshes every
+  `usageRefreshInterval` seconds (default 60).
+
+  Claude Code's local cache in `~/.claude.json` is used as a fallback when the
+  request fails. That cache refreshes rarely — measured over 30 minutes stale,
+  reporting 45% while actual usage was 85% — so cached readings are labelled as
+  cached and flagged once older than `usageStaleMinutes`, never presented as
+  current. Set `usageLiveFetch` to `false` to use the cache alone and make no
+  network requests at all.
+
+  The endpoint is undocumented and may change at Anthropic's discretion; every
+  failure path degrades to the cache rather than erroring. Users on an API key
+  rather than a subscription have no usage data, and the item stays hidden.
 
 - **Show Subscription Usage** command — lists every plan limit with its reset time.
-- Four settings: `showUsage` (default `true`), `usageWarningThreshold` (`50`),
-  `usageDangerThreshold` (`75`), and `usageStaleMinutes` (`30`).
-- A one-time notification introducing the feature, with a "Turn off" action.
-- Usage bars are colour-coded by severity — blue while you have headroom, amber
-  past `usageWarningThreshold`, red past `usageDangerThreshold` — and the status
-  bar item takes a matching warning or error background.
+- Settings: `showUsage` (default `true`), `usageWarningThreshold` (`50`),
+  `usageDangerThreshold` (`75`), `usageStaleMinutes` (`30`),
+  `usageLiveFetch` (`true`), and `usageRefreshInterval` (`60`).
+- A one-time prompt before any account data is used, offering "Local data only"
+  and "Turn off" alongside acceptance.
 
 ### Changed
-- `CLAUDE_CONFIG_DIR` is honored when locating Claude Code's config, for setups
-  that relocate it.
+- `CLAUDE_CONFIG_DIR` is honored when locating Claude Code's config and
+  credentials, for setups that relocate them.
 
 ## [1.5.0] — 2026-08-20
 

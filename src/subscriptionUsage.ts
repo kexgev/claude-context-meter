@@ -1,17 +1,29 @@
 // src/subscriptionUsage.ts
 import * as fs from 'fs';
+import * as https from 'https';
 import * as os from 'os';
 import * as path from 'path';
 
 /**
- * Claude Code caches the payload behind its own `/usage` command in
- * ~/.claude.json under `cachedUsageUtilization`. Reading that file gives us the
- * same session/weekly limits with no credentials, no network request, and no
- * token handling — the cache itself is unauthenticated.
+ * Subscription limits come from the same place Claude Code's own /usage command
+ * reads them: GET /api/oauth/usage, authenticated with the OAuth token Claude
+ * Code stores locally.
  *
- * It is a cache, not live state: it only refreshes while Claude Code is
- * running, so `fetchedAtMs` is treated as a staleness indicator.
+ * Claude Code also caches the last response in ~/.claude.json under
+ * `cachedUsageUtilization`, but it only refreshes that block occasionally — it
+ * was measured sitting ~30 minutes stale while the file itself was rewritten
+ * every few seconds. The cache is therefore only a fallback for when the live
+ * request fails; trusting it alone produces confidently wrong numbers.
+ *
+ * The endpoint is undocumented. It may change or stop working at Anthropic's
+ * discretion, so every failure path degrades to the cache rather than erroring.
  */
+
+const USAGE_HOST = 'api.anthropic.com';
+const USAGE_PATH = '/api/oauth/usage';
+const REQUEST_TIMEOUT_MS = 10_000;
+
+export type UsageSource = 'live' | 'cache';
 
 export interface UsageLimit {
   kind: string;
@@ -26,9 +38,9 @@ export interface UsageSnapshot {
   limits: UsageLimit[];
   fetchedAt: Date;
   ageMs: number;
+  source: UsageSource;
 }
 
-/** Humanized names for the limit kinds we know about. */
 const KIND_LABELS: Record<string, string> = {
   session: 'Session',
   weekly_all: 'Week (all models)',
@@ -36,10 +48,7 @@ const KIND_LABELS: Record<string, string> = {
   weekly_sonnet: 'Week (Sonnet)',
 };
 
-/**
- * Fall back to a readable name for kinds we haven't seen, so limit types added
- * by Anthropic still render instead of being dropped.
- */
+/** Readable name for kinds we have not seen, so new limit types still render. */
 function labelFor(kind: string): string {
   if (KIND_LABELS[kind]) { return KIND_LABELS[kind]; }
   return kind
@@ -61,30 +70,25 @@ export function resolveClaudeConfigPath(): string {
   return dir ? path.join(dir, '.claude.json') : path.join(os.homedir(), '.claude.json');
 }
 
+function resolveCredentialsPath(): string {
+  const dir = process.env.CLAUDE_CONFIG_DIR;
+  return dir
+    ? path.join(dir, '.credentials.json')
+    : path.join(os.homedir(), '.claude', '.credentials.json');
+}
+
 /**
- * Parse the raw ~/.claude.json contents into a usage snapshot.
- * Pure and side-effect free so it can be unit tested without VS Code.
- * Returns null when there is no usage cache — API-key users have none.
+ * Shared parser. The live endpoint returns exactly the object that the cache
+ * stores under `cachedUsageUtilization.utilization`, so both paths land here.
  */
-export function parseUsageCache(raw: string, now = Date.now()): UsageSnapshot | null {
-  let root: unknown;
-  try {
-    root = JSON.parse(raw);
-  } catch {
-    return null; // torn write — caller keeps the previous snapshot
-  }
-
-  const cached = (root as Record<string, unknown> | null)?.['cachedUsageUtilization'] as
-    | Record<string, unknown>
-    | undefined;
-  if (!cached) { return null; }
-
-  const utilization = cached['utilization'] as Record<string, unknown> | undefined;
-  if (!utilization) { return null; }
-
+export function parseUtilization(
+  utilization: Record<string, unknown>,
+  fetchedAtMs: number,
+  source: UsageSource,
+  now = Date.now(),
+): UsageSnapshot | null {
   const limits: UsageLimit[] = [];
 
-  // Preferred shape: the normalized array the /usage UI renders.
   const rawLimits = utilization['limits'];
   if (Array.isArray(rawLimits)) {
     for (const entry of rawLimits) {
@@ -104,7 +108,7 @@ export function parseUsageCache(raw: string, now = Date.now()): UsageSnapshot | 
     }
   }
 
-  // Fallback for older Claude Code versions that only wrote the legacy keys.
+  // Older Claude Code versions wrote only the legacy keys.
   if (limits.length === 0) {
     const legacy: Array<{ key: string; kind: string; group: string }> = [
       { key: 'five_hour', kind: 'session', group: 'session' },
@@ -126,32 +130,123 @@ export function parseUsageCache(raw: string, now = Date.now()): UsageSnapshot | 
 
   if (limits.length === 0) { return null; }
 
-  const fetchedAtMs = typeof cached['fetchedAtMs'] === 'number' ? (cached['fetchedAtMs'] as number) : now;
-  return {
-    limits,
-    fetchedAt: new Date(fetchedAtMs),
-    ageMs: Math.max(0, now - fetchedAtMs),
-  };
+  return { limits, fetchedAt: new Date(fetchedAtMs), ageMs: Math.max(0, now - fetchedAtMs), source };
 }
 
-/**
- * Read and parse the usage cache. Returns null if the file is missing,
- * unreadable, mid-write, or holds no usage data.
- *
- * Only the cachedUsageUtilization subtree is ever extracted — the rest of
- * ~/.claude.json holds account identifiers we deliberately do not touch.
- */
-export function readUsageSnapshot(configPath: string, log: (msg: string) => void): UsageSnapshot | null {
-  let raw: string;
+/** Parse the cached copy out of ~/.claude.json. Null when absent or mid-write. */
+export function parseUsageCache(raw: string, now = Date.now()): UsageSnapshot | null {
+  let root: unknown;
   try {
-    raw = fs.readFileSync(configPath, 'utf8'); // explicit UTF-8: locale default corrupts this file
+    root = JSON.parse(raw);
   } catch {
     return null;
   }
 
-  const snapshot = parseUsageCache(raw);
-  if (!snapshot) { log('[info] No subscription usage data in Claude config.'); }
-  return snapshot;
+  const cached = (root as Record<string, unknown> | null)?.['cachedUsageUtilization'] as
+    | Record<string, unknown>
+    | undefined;
+  const utilization = cached?.['utilization'] as Record<string, unknown> | undefined;
+  if (!utilization) { return null; }
+
+  const fetchedAtMs = typeof cached?.['fetchedAtMs'] === 'number' ? (cached['fetchedAtMs'] as number) : now;
+  return parseUtilization(utilization, fetchedAtMs, 'cache', now);
+}
+
+/** Read the cached snapshot from disk. Only the usage subtree is ever touched. */
+export function readCachedUsage(configPath: string): UsageSnapshot | null {
+  try {
+    // Explicit UTF-8: the locale default corrupts this file on some systems.
+    return parseUsageCache(fs.readFileSync(configPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read the OAuth access token Claude Code stores locally.
+ *
+ * SECURITY: the returned value is a live credential. It is used only as the
+ * Authorization header on the request below, is never logged, never written
+ * anywhere, and is not retained beyond the call that uses it.
+ */
+function readAccessToken(): string | null {
+  try {
+    const raw = fs.readFileSync(resolveCredentialsPath(), 'utf8');
+    const oauth = (JSON.parse(raw) as Record<string, unknown>)['claudeAiOauth'] as
+      | Record<string, unknown>
+      | undefined;
+    const token = oauth?.['accessToken'];
+    if (typeof token !== 'string' || !token) { return null; }
+    const expiresAt = oauth?.['expiresAt'];
+    if (typeof expiresAt === 'number' && expiresAt <= Date.now()) { return null; }
+    return token;
+  } catch {
+    return null; // no credentials file: API-key users, or not signed in
+  }
+}
+
+/**
+ * Fetch current usage from the authenticated endpoint.
+ * Resolves null on any failure so the caller can fall back to the cache.
+ */
+export function fetchLiveUsage(log: (msg: string) => void): Promise<UsageSnapshot | null> {
+  const token = readAccessToken();
+  if (!token) { return Promise.resolve(null); }
+
+  return new Promise(resolve => {
+    const req = https.request(
+      {
+        host: USAGE_HOST, // pinned: the token is only ever sent to Anthropic
+        path: USAGE_PATH,
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'User-Agent': 'claude-context-meter',
+        },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+      res => {
+        let body = '';
+        res.on('data', chunk => { body += chunk; });
+        res.on('end', () => {
+          if (res.statusCode !== 200) {
+            // Status only. The body is never logged in case it echoes request detail.
+            log(`[info] Usage endpoint returned ${res.statusCode}; falling back to cached value.`);
+            resolve(null);
+            return;
+          }
+          try {
+            const json = JSON.parse(body) as Record<string, unknown>;
+            resolve(parseUtilization(json, Date.now(), 'live'));
+          } catch {
+            log('[info] Usage endpoint returned unparseable data; falling back to cached value.');
+            resolve(null);
+          }
+        });
+      },
+    );
+
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve(null)); // deliberately unlogged: errors can carry the URL
+    req.end();
+  });
+}
+
+/**
+ * Preferred snapshot: live when available, otherwise the local cache.
+ * `allowLive` lets users switch off all network access.
+ */
+export async function getUsageSnapshot(
+  configPath: string,
+  allowLive: boolean,
+  log: (msg: string) => void,
+): Promise<UsageSnapshot | null> {
+  if (allowLive) {
+    const live = await fetchLiveUsage(log);
+    if (live) { return live; }
+  }
+  return readCachedUsage(configPath);
 }
 
 /** Highest-percentage limit within a group, or null when the group is absent. */

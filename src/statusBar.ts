@@ -167,11 +167,13 @@ function buildUsageTooltip(usage: UsageSnapshot, cfg: Config, stale: boolean): v
   }
 
   md.appendMarkdown('---\n\n');
-  md.appendMarkdown(
-    stale
-      ? `⚠ Last updated ${formatAge(usage.ageMs)} — start Claude Code to refresh`
-      : `*Updated ${formatAge(usage.ageMs)}*`,
-  );
+  if (usage.source === 'live') {
+    md.appendMarkdown(`*Updated ${formatAge(usage.ageMs)}*`);
+  } else if (stale) {
+    md.appendMarkdown(`⚠ Cached, ${formatAge(usage.ageMs)} — may be well behind actual usage`);
+  } else {
+    md.appendMarkdown(`*Cached, ${formatAge(usage.ageMs)}*`);
+  }
   return md;
 }
 
@@ -378,7 +380,7 @@ export class StatusBarManager {
       weekly ? `${Math.round(weekly.percent)}%w` : '',
     ].filter(Boolean);
 
-    const stale = usage.ageMs > cfg.usageStaleMinutes * 60_000;
+    const stale = usage.source === 'cache' && usage.ageMs > cfg.usageStaleMinutes * 60_000;
     this.usageItem.text = `$(dashboard) Usage ${parts.join(' · ')}${stale ? ' ⚠' : ''}`;
     this.usageItem.tooltip = buildUsageTooltip(usage, cfg, stale);
 

@@ -37,6 +37,8 @@ export interface Config {
   usageWarningThreshold: number;
   usageDangerThreshold: number;
   usageStaleMinutes: number;
+  usageLiveFetch: boolean;
+  usageRefreshInterval: number;
 }
 
 export interface SessionResult {
