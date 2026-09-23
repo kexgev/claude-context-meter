@@ -39,6 +39,8 @@ export interface UsageSnapshot {
   fetchedAt: Date;
   ageMs: number;
   source: UsageSource;
+  /** Plan name as claude.ai shows it, e.g. "Max (5x)". Null when unknown. */
+  plan: string | null;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -48,8 +50,26 @@ const KIND_LABELS: Record<string, string> = {
   weekly_sonnet: 'Week (Sonnet)',
 };
 
+/**
+ * Server-supplied label for a scoped row: `scope.model.display_name` (e.g.
+ * "Fable") or `scope.surface.display_name`. Null for unscoped rows.
+ */
+function scopeName(scope: unknown): string | null {
+  if (!scope || typeof scope !== 'object') { return null; }
+  const s = scope as Record<string, unknown>;
+  for (const key of ['model', 'surface']) {
+    const name = (s[key] as Record<string, unknown> | null | undefined)?.['display_name'];
+    if (typeof name === 'string' && name.trim()) { return name.trim(); }
+  }
+  return null;
+}
+
 /** Readable name for kinds we have not seen, so new limit types still render. */
-function labelFor(kind: string): string {
+function labelFor(kind: string, scope?: string | null): string {
+  if (scope) {
+    if (kind.startsWith('weekly')) { return `Week (${scope})`; }
+    if (kind.startsWith('session')) { return `Session (${scope})`; }
+  }
   if (KIND_LABELS[kind]) { return KIND_LABELS[kind]; }
   return kind
     .split('_')
@@ -100,7 +120,7 @@ export function parseUtilization(
       limits.push({
         kind,
         group: typeof e['group'] === 'string' ? e['group'] : kind,
-        label: labelFor(kind),
+        label: labelFor(kind, scopeName(e['scope'])),
         percent,
         resetsAt: parseDate(e['resets_at']),
         isActive: e['is_active'] === true,
@@ -113,6 +133,8 @@ export function parseUtilization(
     const legacy: Array<{ key: string; kind: string; group: string }> = [
       { key: 'five_hour', kind: 'session', group: 'session' },
       { key: 'seven_day', kind: 'weekly_all', group: 'weekly' },
+      { key: 'seven_day_opus', kind: 'weekly_opus', group: 'weekly' },
+      { key: 'seven_day_sonnet', kind: 'weekly_sonnet', group: 'weekly' },
     ];
     for (const { key, kind, group } of legacy) {
       const row = utilization[key] as Record<string, unknown> | undefined | null;
@@ -130,7 +152,41 @@ export function parseUtilization(
 
   if (limits.length === 0) { return null; }
 
-  return { limits, fetchedAt: new Date(fetchedAtMs), ageMs: Math.max(0, now - fetchedAtMs), source };
+  return {
+    limits,
+    fetchedAt: new Date(fetchedAtMs),
+    ageMs: Math.max(0, now - fetchedAtMs),
+    source,
+    plan: null,
+  };
+}
+
+/**
+ * Plan name from Claude Code's `subscriptionType` + `rateLimitTier`, matching
+ * claude.ai's wording: "Pro", "Max (5x)", "Max (20x)", "Team", ...
+ */
+export function planLabel(subscriptionType: unknown, rateLimitTier: unknown): string | null {
+  if (typeof subscriptionType !== 'string' || !subscriptionType) { return null; }
+  const type = subscriptionType.toLowerCase();
+  const tier = typeof rateLimitTier === 'string' ? rateLimitTier.toLowerCase() : '';
+  if (type === 'max') {
+    const mult = /max_(\d+)x/.exec(tier)?.[1];
+    return mult ? `Max (${mult}x)` : 'Max';
+  }
+  return type[0].toUpperCase() + type.slice(1);
+}
+
+/** Read the plan from the credentials file. Only the two non-secret plan fields are touched. */
+export function readPlan(): string | null {
+  try {
+    const raw = fs.readFileSync(resolveCredentialsPath(), 'utf8');
+    const oauth = (JSON.parse(raw) as Record<string, unknown>)['claudeAiOauth'] as
+      | Record<string, unknown>
+      | undefined;
+    return planLabel(oauth?.['subscriptionType'], oauth?.['rateLimitTier']);
+  } catch {
+    return null;
+  }
 }
 
 /** Parse the cached copy out of ~/.claude.json. Null when absent or mid-write. */
@@ -156,7 +212,9 @@ export function parseUsageCache(raw: string, now = Date.now()): UsageSnapshot | 
 export function readCachedUsage(configPath: string): UsageSnapshot | null {
   try {
     // Explicit UTF-8: the locale default corrupts this file on some systems.
-    return parseUsageCache(fs.readFileSync(configPath, 'utf8'));
+    const snapshot = parseUsageCache(fs.readFileSync(configPath, 'utf8'));
+    if (snapshot) { snapshot.plan = readPlan(); }
+    return snapshot;
   } catch {
     return null;
   }
@@ -244,7 +302,7 @@ export async function getUsageSnapshot(
 ): Promise<UsageSnapshot | null> {
   if (allowLive) {
     const live = await fetchLiveUsage(log);
-    if (live) { return live; }
+    if (live) { live.plan = readPlan(); return live; }
   }
   return readCachedUsage(configPath);
 }

@@ -61,10 +61,10 @@ Updated 9:42:15 PM
 ⏱ Usage 45% · 6%w
 ```
 
-Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows every limit your plan reports:
+Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows your plan (Pro, Max (5x), Max (20x), Team, Enterprise) and every limit it reports, including per-model weekly limits such as Fable, labelled with the model name the server sends:
 
 ```
-Claude subscription usage
+Claude subscription usage  ·  Max (5x)
 
 Session  ·  🟢 safe
 
@@ -74,6 +74,11 @@ Resets 7:39pm
 Week (all models)  ·  🟢 safe
 
 🟦⬜⬜⬜⬜⬜⬜⬜⬜⬜  6% used
+Resets Aug 24, 3:59pm
+
+Week (Fable)  ·  🟢 safe
+
+🟦⬜⬜⬜⬜⬜⬜⬜⬜⬜  2% used
 Resets Aug 24, 3:59pm
 
 ───────────────────────────────────
@@ -115,7 +120,7 @@ Token limit is auto-detected from the model name:
 
 | Model | Context |
 |---|---|
-| Claude Opus 5, Claude Fable 5 / Mythos 5, Opus 4.5/4.6/4.7/4.8, Sonnet 5, Sonnet 4.5/4.6/4.7, and any future Opus/Sonnet | 1M tokens |
+| Claude Opus 5.5, Opus 5, Claude Fable 5 / Mythos 5, Opus 4.5/4.6/4.7/4.8, Sonnet 5, Sonnet 4.5/4.6/4.7, and any future Opus/Sonnet | 1M tokens |
 | All Haiku models (4.5, 3.5, 3) | 200k tokens |
 | Legacy Claude 3 / 3.5 Sonnet & Opus | 200k tokens |
 

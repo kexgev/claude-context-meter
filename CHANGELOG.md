@@ -5,6 +5,25 @@ All notable changes to **Claude Code Usage Meter** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] — 2026-09-23
+
+### Added
+- **Plan name in the usage meter.** The tooltip header and the click popup now
+  show your plan the way claude.ai does — Pro, Max (5x), Max (20x), Team or
+  Enterprise — read from the plan fields Claude Code stores alongside its
+  login. Only those two fields are read; the token is never touched for this.
+- **Claude Opus 5.5 pricing** — $4 / $20 per million input / output tokens,
+  $0.20 cache reads, $5 cache writes. Opus 5.5 gets its own row because its
+  cache-read discount (5% of input) differs from every other model's 10%.
+
+### Fixed
+- **Per-model weekly limits are labelled by model.** The Fable weekly limit
+  (and any future model- or surface-scoped limit) showed as a generic
+  "Weekly Scoped" row. It now reads "Week (Fable)", using the display name the
+  server sends, so new scoped limits get the right label without an update.
+- Older usage responses that reported Opus / Sonnet weekly limits under the
+  legacy `seven_day_opus` / `seven_day_sonnet` keys now show those rows too.
+
 ## [2.0.1] — 2026-08-20
 
 ### Changed

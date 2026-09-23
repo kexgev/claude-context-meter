@@ -421,7 +421,7 @@ async function showUsageDetail(): Promise<void> {
   });
 
   await vscode.window.showQuickPick(items, {
-    title: `Claude subscription — updated ${formatAge(usage.ageMs)}${stale ? ' (stale)' : ''}`,
+    title: `Claude subscription${usage.plan ? ` (${usage.plan})` : ''} — updated ${formatAge(usage.ageMs)}${stale ? ' (stale)' : ''}`,
     placeHolder: stale ? 'Start Claude Code to refresh these numbers' : 'Subscription limits',
   });
 }

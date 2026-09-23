@@ -56,6 +56,8 @@ const PRICING: Array<{ pattern: string; rates: PricingRow }> = [
   // Top tier
   { pattern: 'claude-fable-5',    rates: rates(10.00, 50.00) },
   { pattern: 'claude-mythos-5',   rates: rates(10.00, 50.00) },
+  // Opus 5.5 — $4/$20, cache read cut to $0.20 (5% of input)
+  { pattern: 'claude-opus-5-5',   rates: { input: 4.00, output: 20.00, cacheRead: 0.20, cacheWrite: 5.00 } },
   // Current-gen Opus (4.5 and up, incl. 5) — all $5/$25
   { pattern: 'claude-opus-5',     rates: rates(5.00, 25.00) },
   { pattern: 'claude-opus-4-8',   rates: rates(5.00, 25.00) },
@@ -155,7 +157,8 @@ function buildUsageTooltip(usage: UsageSnapshot, cfg: Config, stale: boolean): v
   const md = new vscode.MarkdownString();
   md.supportHtml = false;
 
-  md.appendMarkdown('**Claude subscription usage**\n\n');
+  const plan = usage.plan ? `  ·  ${escapeMd(usage.plan)}` : '';
+  md.appendMarkdown(`**Claude subscription usage**${plan}\n\n`);
 
   for (const limit of usage.limits) {
     const status = statusEmoji(limit.percent, cfg.usageWarningThreshold, cfg.usageDangerThreshold);
