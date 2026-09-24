@@ -1,4 +1,6 @@
 // src/subscriptionUsage.ts
+import { execFile } from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as https from 'https';
 import * as os from 'os';
@@ -22,6 +24,7 @@ import * as path from 'path';
 const USAGE_HOST = 'api.anthropic.com';
 const USAGE_PATH = '/api/oauth/usage';
 const REQUEST_TIMEOUT_MS = 10_000;
+const KEYCHAIN_TIMEOUT_MS = 5_000;
 
 export type UsageSource = 'live' | 'cache';
 
@@ -29,6 +32,8 @@ export interface UsageLimit {
   kind: string;
   group: string;
   label: string;
+  /** Server's display name for a scoped row ("Fable", "Fable · Cowork"); null when unscoped. */
+  scope: string | null;
   percent: number;
   resetsAt: Date | null;
   isActive: boolean;
@@ -51,17 +56,19 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 /**
- * Server-supplied label for a scoped row: `scope.model.display_name` (e.g.
- * "Fable") or `scope.surface.display_name`. Null for unscoped rows.
+ * Server-supplied label for a scoped row, built from `scope.model.display_name`
+ * (e.g. "Fable") and `scope.surface.display_name`. The two are independent, so
+ * both are kept when present: "Fable · Cowork". Null for unscoped rows.
  */
 function scopeName(scope: unknown): string | null {
   if (!scope || typeof scope !== 'object') { return null; }
   const s = scope as Record<string, unknown>;
+  const names: string[] = [];
   for (const key of ['model', 'surface']) {
     const name = (s[key] as Record<string, unknown> | null | undefined)?.['display_name'];
-    if (typeof name === 'string' && name.trim()) { return name.trim(); }
+    if (typeof name === 'string' && name.trim()) { names.push(name.trim()); }
   }
-  return null;
+  return names.length > 0 ? names.join(' · ') : null;
 }
 
 /** Readable name for kinds we have not seen, so new limit types still render. */
@@ -70,12 +77,13 @@ function labelFor(kind: string, scope?: string | null): string {
     if (kind.startsWith('weekly')) { return `Week (${scope})`; }
     if (kind.startsWith('session')) { return `Session (${scope})`; }
   }
-  if (KIND_LABELS[kind]) { return KIND_LABELS[kind]; }
-  return kind
+  if (KIND_LABELS[kind] && !scope) { return KIND_LABELS[kind]; }
+  const title = kind
     .split('_')
-    .filter(Boolean)
+    .filter(w => w && w !== 'scoped')
     .map(w => w[0].toUpperCase() + w.slice(1))
     .join(' ');
+  return scope ? `${title} (${scope})` : title;
 }
 
 function parseDate(value: unknown): Date | null {
@@ -117,10 +125,12 @@ export function parseUtilization(
       const percent = e['percent'];
       const kind = typeof e['kind'] === 'string' ? e['kind'] : '';
       if (typeof percent !== 'number' || !kind) { continue; }
+      const scope = scopeName(e['scope']);
       limits.push({
         kind,
         group: typeof e['group'] === 'string' ? e['group'] : kind,
-        label: labelFor(kind, scopeName(e['scope'])),
+        label: labelFor(kind, scope),
+        scope,
         percent,
         resetsAt: parseDate(e['resets_at']),
         isActive: e['is_active'] === true,
@@ -143,6 +153,7 @@ export function parseUtilization(
         kind,
         group,
         label: labelFor(kind),
+        scope: null,
         percent: row['utilization'] as number,
         resetsAt: parseDate(row['resets_at']),
         isActive: true,
@@ -176,18 +187,11 @@ export function planLabel(subscriptionType: unknown, rateLimitTier: unknown): st
   return type[0].toUpperCase() + type.slice(1);
 }
 
-/** Read the plan from the credentials file. Only the two non-secret plan fields are touched. */
-export function readPlan(): string | null {
-  try {
-    const raw = fs.readFileSync(resolveCredentialsPath(), 'utf8');
-    const oauth = (JSON.parse(raw) as Record<string, unknown>)['claudeAiOauth'] as
-      | Record<string, unknown>
-      | undefined;
-    return planLabel(oauth?.['subscriptionType'], oauth?.['rateLimitTier']);
-  } catch {
-    return null;
-  }
-}
+/**
+ * Plan from the last credentials read. The file-watcher path reuses it rather
+ * than re-parsing the token-bearing credentials every few seconds.
+ */
+let lastPlan: string | null = null;
 
 /** Parse the cached copy out of ~/.claude.json. Null when absent or mid-write. */
 export function parseUsageCache(raw: string, now = Date.now()): UsageSnapshot | null {
@@ -213,7 +217,7 @@ export function readCachedUsage(configPath: string): UsageSnapshot | null {
   try {
     // Explicit UTF-8: the locale default corrupts this file on some systems.
     const snapshot = parseUsageCache(fs.readFileSync(configPath, 'utf8'));
-    if (snapshot) { snapshot.plan = readPlan(); }
+    if (snapshot) { snapshot.plan = lastPlan; }
     return snapshot;
   } catch {
     return null;
@@ -221,36 +225,76 @@ export function readCachedUsage(configPath: string): UsageSnapshot | null {
 }
 
 /**
- * Read the OAuth access token Claude Code stores locally.
- *
- * SECURITY: the returned value is a live credential. It is used only as the
- * Authorization header on the request below, is never logged, never written
- * anywhere, and is not retained beyond the call that uses it.
+ * macOS Keychain item Claude Code stores its login under when there is no
+ * credentials file. A custom CLAUDE_CONFIG_DIR gets its own item, suffixed with
+ * a hash of the directory — mirrored from Claude Code's own naming.
  */
-function readAccessToken(): string | null {
+function keychainServices(): string[] {
+  const base = 'Claude Code-credentials';
+  const dir = process.env.CLAUDE_CONFIG_DIR;
+  if (!dir) { return [base]; }
+  const hash = crypto.createHash('sha256').update(dir.normalize('NFC')).digest('hex').substring(0, 8);
+  return [`${base}-${hash}`, base];
+}
+
+function readKeychain(service: string): Promise<string | null> {
+  return new Promise(resolve => {
+    try {
+      execFile(
+        'security',
+        ['find-generic-password', '-s', service, '-w'],
+        { encoding: 'utf8', timeout: KEYCHAIN_TIMEOUT_MS, windowsHide: true },
+        // Output is the secret itself: never logged, errors deliberately dropped.
+        (err, stdout) => resolve(err ? null : stdout.trim() || null),
+      );
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Read Claude Code's stored OAuth record: the credentials file, or on macOS the
+ * login Keychain when there is no file.
+ *
+ * SECURITY: the record holds a live credential. Callers use the access token
+ * only as the Authorization header of the usage request and read nothing else
+ * but the two plan fields. It is never logged, written, or retained.
+ */
+async function readOAuthRecord(): Promise<Record<string, unknown> | null> {
+  let raw: string | null = null;
   try {
-    const raw = fs.readFileSync(resolveCredentialsPath(), 'utf8');
-    const oauth = (JSON.parse(raw) as Record<string, unknown>)['claudeAiOauth'] as
-      | Record<string, unknown>
-      | undefined;
-    const token = oauth?.['accessToken'];
-    if (typeof token !== 'string' || !token) { return null; }
-    const expiresAt = oauth?.['expiresAt'];
-    if (typeof expiresAt === 'number' && expiresAt <= Date.now()) { return null; }
-    return token;
+    raw = fs.readFileSync(resolveCredentialsPath(), 'utf8');
   } catch {
-    return null; // no credentials file: API-key users, or not signed in
+    if (process.platform === 'darwin') {
+      for (const service of keychainServices()) {
+        raw = await readKeychain(service);
+        if (raw) { break; }
+      }
+    }
   }
+  if (!raw) { return null; } // API-key users, or not signed in
+  try {
+    const oauth = (JSON.parse(raw) as Record<string, unknown>)['claudeAiOauth'];
+    return oauth && typeof oauth === 'object' ? (oauth as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function accessTokenOf(oauth: Record<string, unknown> | null): string | null {
+  const token = oauth?.['accessToken'];
+  if (typeof token !== 'string' || !token) { return null; }
+  const expiresAt = oauth?.['expiresAt'];
+  if (typeof expiresAt === 'number' && expiresAt <= Date.now()) { return null; }
+  return token;
 }
 
 /**
  * Fetch current usage from the authenticated endpoint.
  * Resolves null on any failure so the caller can fall back to the cache.
  */
-export function fetchLiveUsage(log: (msg: string) => void): Promise<UsageSnapshot | null> {
-  const token = readAccessToken();
-  if (!token) { return Promise.resolve(null); }
-
+function fetchLiveUsage(token: string, log: (msg: string) => void): Promise<UsageSnapshot | null> {
   return new Promise(resolve => {
     const req = https.request(
       {
@@ -300,9 +344,12 @@ export async function getUsageSnapshot(
   allowLive: boolean,
   log: (msg: string) => void,
 ): Promise<UsageSnapshot | null> {
-  if (allowLive) {
-    const live = await fetchLiveUsage(log);
-    if (live) { live.plan = readPlan(); return live; }
+  const oauth = await readOAuthRecord();
+  lastPlan = planLabel(oauth?.['subscriptionType'], oauth?.['rateLimitTier']);
+  const token = allowLive ? accessTokenOf(oauth) : null;
+  if (token) {
+    const live = await fetchLiveUsage(token, log);
+    if (live) { live.plan = lastPlan; return live; }
   }
   return readCachedUsage(configPath);
 }

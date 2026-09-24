@@ -61,7 +61,7 @@ Updated 9:42:15 PM
 ⏱ Usage 45% · 6%w
 ```
 
-Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit, matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows your plan (Pro, Max (5x), Max (20x), Team, Enterprise) and every limit it reports, including per-model weekly limits such as Fable, labelled with the model name the server sends:
+Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit (the `w` figure is your highest weekly limit, including per-model ones like Fable), matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows your plan (Pro, Max (5x), Max (20x), Team, Enterprise) and every limit it reports, including per-model weekly limits such as Fable, labelled with the model name the server sends:
 
 ```
 Claude subscription usage  ·  Max (5x)
@@ -89,7 +89,7 @@ Crossing a threshold raises a one-time notification per limit, so a cap that sto
 
 ### How it works
 
-Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`, or the OS credential store). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. Refreshes every `usageRefreshInterval` seconds (default 60).
+Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`; on macOS, where Claude Code keeps it in the login Keychain, the `Claude Code-credentials` Keychain item — macOS may ask once to allow access). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. The plan name comes from two non-secret fields in the same record (`subscriptionType`, `rateLimitTier`). Refreshes every `usageRefreshInterval` seconds (default 60).
 
 Claude Code also caches its last usage response in `~/.claude.json`, and that cache is used as a fallback whenever the request fails — offline, rate-limited, expired token, or the endpoint changing. **The cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%. So cached readings are labelled as cached, and flagged with `⚠` once older than `usageStaleMinutes`, rather than being presented as current.
 
@@ -97,7 +97,7 @@ To avoid network requests entirely, set `claudeContextMeter.usageLiveFetch` to `
 
 > **Note:** this endpoint is undocumented. It may change or stop working at Anthropic's discretion, in which case the meter falls back to the cache rather than erroring.
 
-If you use an API key rather than a Claude subscription there is no usage data, and the item simply doesn't appear. Set `claudeContextMeter.showUsage` to `false` to hide it.
+If you use an API key rather than a Claude subscription there is no usage data, and the item simply doesn't appear. Set `claudeContextMeter.showUsage` to `false` to turn it off completely — the extension then neither reads the sign-in token nor makes any request.
 
 ## Commands
 

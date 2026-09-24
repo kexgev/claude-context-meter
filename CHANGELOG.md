@@ -5,6 +5,33 @@ All notable changes to **Claude Code Usage Meter** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] — 2026-09-24
+
+### Fixed
+- **Fable 5.1 and Mythos 5.1 cache reads were costed 4× too high.** Both were
+  matched by the Fable 5 / Mythos 5 rows ($1.00 per million cache reads); they
+  now have their own rows at $0.25, matching Anthropic's pricing.
+- **Turning usage off now really turns it off.** With `showUsage` set to
+  `false` the extension still read the sign-in token and called the usage
+  endpoint every minute, only hiding the result. It now stops polling and
+  reads nothing.
+- **Limit alerts no longer collide between per-model limits.** Alerts were
+  tracked per limit kind and reset time, which every per-model weekly limit
+  shares — so an alert for Fable would have silenced one for any other model.
+- **macOS: usage and plan now work when Claude Code stores its login in the
+  Keychain** rather than in `~/.claude/.credentials.json`. The README already
+  claimed this; the code did not do it.
+- Limits scoped to both a model and a surface show both names
+  ("Week (Fable · Cowork)"), and scoped limits of an unfamiliar kind keep the
+  model name instead of reading "… Scoped".
+- Alerts keep proper nouns: "Claude usage: Week (Fable) limit at 80%" rather
+  than "claude week (fable) limit".
+- The usage popup title reads "Claude subscription · Max (5x)" instead of
+  nesting brackets.
+- The update notification no longer repeats 1.x release notes.
+- The credentials record is read once per poll instead of on every
+  `~/.claude.json` change, which happens every few seconds.
+
 ## [2.1.0] — 2026-09-23
 
 ### Added
@@ -14,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   login. Only those two fields are read; the token is never touched for this.
 - **Claude Opus 5.5 pricing** — $4 / $20 per million input / output tokens,
   $0.20 cache reads, $5 cache writes. Opus 5.5 gets its own row because its
-  cache-read discount (5% of input) differs from every other model's 10%.
+  cache-read rate (5% of input) differs from the 10% most models use.
 
 ### Fixed
 - **Per-model weekly limits are labelled by model.** The Fable weekly limit

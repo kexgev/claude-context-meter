@@ -5,6 +5,8 @@
 docs/**
 test/**
 src/**
+out/test/**
+tsconfig.test.json
 Projects/**
 tsconfig.json
 .eslintrc.json

@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { SessionInfo, Config, TokenBreakdown } from './types';
 import { abbreviateName, cleanModelName } from './sessionManager';
-import { UsageSnapshot, peakOf, formatAge } from './subscriptionUsage';
+import { UsageLimit, UsageSnapshot, peakOf, formatAge } from './subscriptionUsage';
 
 /** 5-char Unicode progress bar. Each block = 20%. Used in status bar item text. */
 function buildBar5(pct: number): string {
@@ -53,7 +53,9 @@ function rates(input: number, output: number): PricingRow {
 }
 
 const PRICING: Array<{ pattern: string; rates: PricingRow }> = [
-  // Top tier
+  // Top tier. 5.1 cut cache reads to $0.25 (2.5% of input), so it precedes the 5 rows.
+  { pattern: 'claude-fable-5-1',  rates: { input: 10.00, output: 50.00, cacheRead: 0.25, cacheWrite: 12.50 } },
+  { pattern: 'claude-mythos-5-1', rates: { input: 10.00, output: 50.00, cacheRead: 0.25, cacheWrite: 12.50 } },
   { pattern: 'claude-fable-5',    rates: rates(10.00, 50.00) },
   { pattern: 'claude-mythos-5',   rates: rates(10.00, 50.00) },
   // Opus 5.5 — $4/$20, cache read cut to $0.20 (5% of input)
@@ -150,6 +152,15 @@ function fmtReset(resetsAt: Date | null): string {
   return isToday
     ? `Resets ${time}`
     : `Resets ${resetsAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${time}`;
+}
+
+/**
+ * One alert slot per limit per window. Scoped rows share a kind
+ * ("weekly_scoped") and a reset time, so the scope is part of the key —
+ * otherwise a Fable alert would silence every other scoped limit.
+ */
+function notifyKey(limit: UsageLimit): string {
+  return `${limit.kind}:${limit.scope ?? ''}:${limit.resetsAt?.getTime() ?? 'none'}`;
 }
 
 /** Tooltip for the account-wide subscription meter: one bar per reported limit. */
@@ -415,7 +426,7 @@ export class StatusBarManager {
     if (usage.source !== 'live') { return; } // never alert on a stale cached number
 
     for (const limit of usage.limits) {
-      const key = `${limit.kind}:${limit.resetsAt?.getTime() ?? 'none'}`;
+      const key = notifyKey(limit);
       const fired = this.usageNotified.get(key) ?? new Set<'warn' | 'crit'>();
       const reset = limit.resetsAt ? ` Resets ${fmtReset(limit.resetsAt).replace(/^Resets /, '')}.` : '';
 
@@ -424,20 +435,20 @@ export class StatusBarManager {
         fired.add('crit');
         this.usageNotified.set(key, fired);
         void vscode.window.showErrorMessage(
-          `Claude ${limit.label.toLowerCase()} limit at ${Math.round(limit.percent)}%.${reset}`,
+          `Claude usage: ${limit.label} limit at ${Math.round(limit.percent)}%.${reset}`,
         );
       } else if (limit.percent >= cfg.usageWarningThreshold && !fired.has('warn')) {
         fired.add('warn');
         this.usageNotified.set(key, fired);
         void vscode.window.showWarningMessage(
-          `Claude ${limit.label.toLowerCase()} limit at ${Math.round(limit.percent)}%.${reset}`,
+          `Claude usage: ${limit.label} limit at ${Math.round(limit.percent)}%.${reset}`,
         );
       }
     }
 
     // Drop keys for windows that have already reset, so the map cannot grow
     // without bound across a long-running session.
-    const liveKeys = new Set(usage.limits.map(l => `${l.kind}:${l.resetsAt?.getTime() ?? 'none'}`));
+    const liveKeys = new Set(usage.limits.map(notifyKey));
     for (const key of this.usageNotified.keys()) {
       if (!liveKeys.has(key)) { this.usageNotified.delete(key); }
     }

@@ -119,6 +119,7 @@ export function activate(context: vscode.ExtensionContext): void {
 /** (Re)start the usage poll. Interval changes take effect without a reload. */
 function startUsageTimer(): void {
   stopUsageTimer();
+  if (!getConfig().showUsage) { return; }
   const seconds = Math.max(15, getConfig().usageRefreshInterval);
   usageTimer = setInterval(() => void refreshUsage(), seconds * 1000);
 }
@@ -360,7 +361,7 @@ async function showWhatsNewIfUpdated(context: vscode.ExtensionContext): Promise<
   if (!previous || previous === current) { return; }
 
   const action = await vscode.window.showInformationMessage(
-    `Claude Code Usage Meter updated to ${current} — corrected pricing for current Claude models, plus spend summaries and daily budget alerts.`,
+    `Claude Code Usage Meter updated to ${current}. See the changelog for what's new.`,
     'See what changed',
   );
   if (action === 'See what changed') {
@@ -379,6 +380,12 @@ async function showWhatsNewIfUpdated(context: vscode.ExtensionContext): Promise<
  */
 async function refreshUsage(): Promise<void> {
   const cfg = getConfig();
+  // Off means off: no credentials read and no request, not just a hidden item.
+  if (!cfg.showUsage) {
+    stopUsageTimer();
+    statusBarMgr.updateUsage(null);
+    return;
+  }
   const snapshot = await getUsageSnapshot(
     resolveClaudeConfigPath(),
     cfg.usageLiveFetch,
@@ -393,6 +400,7 @@ async function refreshUsage(): Promise<void> {
  * its own timer instead.
  */
 function refreshUsageFromCache(): void {
+  if (!getConfig().showUsage) { return; }
   if (statusBarMgr.getUsage()?.source === 'live') { return; } // never downgrade live data
   statusBarMgr.updateUsage(readCachedUsage(resolveClaudeConfigPath()));
 }
@@ -421,7 +429,7 @@ async function showUsageDetail(): Promise<void> {
   });
 
   await vscode.window.showQuickPick(items, {
-    title: `Claude subscription${usage.plan ? ` (${usage.plan})` : ''} — updated ${formatAge(usage.ageMs)}${stale ? ' (stale)' : ''}`,
+    title: `Claude subscription${usage.plan ? ` · ${usage.plan}` : ''} — updated ${formatAge(usage.ageMs)}${stale ? ' (stale)' : ''}`,
     placeHolder: stale ? 'Start Claude Code to refresh these numbers' : 'Subscription limits',
   });
 }
