@@ -5,7 +5,15 @@ export interface TokenBreakdown {
   output: number;
   cacheRead: number;
   cacheWrite: number;
-  total: number; // input + output + cacheRead + cacheWrite
+  /**
+   * Context-window occupancy: input + cacheRead + cacheWrite. Output tokens are
+   * excluded, matching how Claude Code computes its own context percentage.
+   */
+  total: number;
+  /** Portion of cacheWrite written with the 1-hour TTL (billed at 2x input). Absent = all 5-minute. */
+  cacheWrite1h?: number;
+  /** True when the turn ran in fast mode (`usage.speed === "fast"`), billed at 2x standard rates. */
+  fast?: boolean;
 }
 
 export interface SessionInfo {

@@ -5,6 +5,52 @@ All notable changes to **Claude Code Usage Meter** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] — 2026-11-14
+
+### Added
+- **Fable 5.2 / Mythos 5.2, Sonnet 5.5 and Haiku 5.5 pricing.** Fable 5.2 is
+  $8/$40 with $0.20 cache reads; Sonnet 5.5 $2/$10 with $0.10 cache reads;
+  Haiku 5.5 $0.10/$0.50, switching to $0.50/$2.50 for requests whose prompt
+  exceeds 100K tokens.
+- **1-hour cache writes are priced correctly.** Claude Code writes its prompt
+  cache with the 1-hour TTL, which bills at 2x input rather than 1.25x. The
+  split is read from the transcript's `cache_creation` breakdown.
+- **Fast-mode turns** (`usage.speed: "fast"`) are billed at 2x standard rates.
+- Follows Claude Code's context variables when VS Code inherits them:
+  `CLAUDE_CODE_DISABLE_1M_CONTEXT` caps every model at 200K, and
+  `CLAUDE_CODE_MAX_CONTEXT_TOKENS` sets the window for unrecognised IDs (for
+  known models only together with `DISABLE_COMPACT`).
+- Honours `CLAUDE_CONFIG_DIR` for the transcripts folder (it was already
+  honoured for usage).
+
+### Fixed
+- **Fable 5.2 was priced as Fable 5** ($10/$50, cache reads 5x too high).
+- **Sonnet 5 and 5.5 were priced at $3/$15** instead of $2/$10.
+- **Haiku 5.5 was priced at $1/$5** (10x too high) and **shown with a 200K
+  window** instead of 1M, so its context percentage, burn rate and
+  time-to-full were 5x off.
+- **Opus 4 / 4.1 / 4.5 and Sonnet 4 / 4.5 showed a 1M window**; they are 200K.
+  Opus 4.6 and Sonnet 4.6 are 200K unless the model ID carries `[1m]`, and a
+  session that grows past 200K is promoted to 1M unless the environment pins
+  the window.
+- Gateway aliases that name no model family (such as `claude-sonnet-latest`)
+  were assumed 1M; they now use the `contextLimit` setting (200K by default),
+  as Claude Code does, or 1M with a `[1m]` suffix.
+- Dated IDs can no longer match a newer row's prefix (for example a dated
+  `claude-fable-5-…` priced as Fable 5.2).
+- Dotted gateway IDs such as `claude-opus-4.8` were priced as legacy Opus 4
+  ($15/$75).
+- Model names keep no `global.anthropic.` prefix or `[1m]` suffix.
+- Unrecognised models are priced as Opus 5.5 (Claude Code's default) instead
+  of Sonnet 4.
+
+### Changed
+- **Context usage counts input and cache tokens only**, matching Claude Code's
+  own context percentage. Output tokens still count toward cost.
+- The session limit is labelled **"5-hour"**, as Claude Code 2.1.312 renamed it.
+- Notes that Claude Code 2.1.325 was seen not writing the `~/.claude.json`
+  usage cache, so the cache fallback may be unavailable.
+
 ## [2.1.1] — 2026-09-24
 
 ### Fixed
@@ -219,6 +265,9 @@ nothing needs reinstalling.
 
 - Initial release.
 
+[2.1.2]: https://github.com/kexgev/claude-context-meter/releases/tag/v2.1.2
+[2.1.1]: https://github.com/kexgev/claude-context-meter/releases/tag/v2.1.1
+[2.1.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v2.1.0
 [2.0.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v2.0.0
 [1.6.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kexgev/claude-context-meter/releases/tag/v1.5.0

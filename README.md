@@ -1,6 +1,6 @@
 # Claude Code Usage Meter
 
-A VS Code extension that puts your Claude Code usage in the status bar: subscription session and weekly limits, context window fill, cost, and burn rate — updating live via file watcher, no polling.
+A VS Code extension that puts your Claude Code usage in the status bar: subscription 5-hour and weekly limits, context window fill, cost, and burn rate — updating live via file watcher, no polling.
 
 ## What's new in 2.0.0
 
@@ -61,12 +61,12 @@ Updated 9:42:15 PM
 ⏱ Usage 45% · 6%w
 ```
 
-Shows how much of your Claude plan you've used: the session (5-hour) window and the weekly limit (the `w` figure is your highest weekly limit, including per-model ones like Fable), matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows your plan (Pro, Max (5x), Max (20x), Team, Enterprise) and every limit it reports, including per-model weekly limits such as Fable, labelled with the model name the server sends:
+Shows how much of your Claude plan you've used: the 5-hour window and the weekly limit (the `w` figure is your highest weekly limit, including per-model ones like Fable), matching what `/usage` reports in Claude Code. Bars run blue while you have room, amber past `usageWarningThreshold`, and red past `usageDangerThreshold`; the status bar item picks up a matching warning or error background. Hovering shows your plan (Pro, Max (5x), Max (20x), Team, Enterprise) and every limit it reports, including per-model weekly limits such as Fable, labelled with the model name the server sends:
 
 ```
 Claude subscription usage  ·  Max (5x)
 
-Session  ·  🟢 safe
+5-hour  ·  🟢 safe
 
 🟦🟦🟦🟦🟦⬜⬜⬜⬜⬜  45% used
 Resets 7:39pm
@@ -91,9 +91,12 @@ Crossing a threshold raises a one-time notification per limit, so a cap that sto
 
 Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`; on macOS, where Claude Code keeps it in the login Keychain, the `Claude Code-credentials` Keychain item — macOS may ask once to allow access). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. The plan name comes from two non-secret fields in the same record (`subscriptionType`, `rateLimitTier`). Refreshes every `usageRefreshInterval` seconds (default 60).
 
-Claude Code also caches its last usage response in `~/.claude.json`, and that cache is used as a fallback whenever the request fails — offline, rate-limited, expired token, or the endpoint changing. **The cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%. So cached readings are labelled as cached, and flagged with `⚠` once older than `usageStaleMinutes`, rather than being presented as current.
+Claude Code has cached its last usage response in `~/.claude.json`, and that cache is used as a fallback whenever the request fails — offline, rate-limited, expired token, or the endpoint changing. **The cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%. So cached readings are labelled as cached, and flagged with `⚠` once older than `usageStaleMinutes`, rather than being presented as current.
 
-To avoid network requests entirely, set `claudeContextMeter.usageLiveFetch` to `false`. Usage then comes from the local cache alone — accepting that it will often be out of date.
+> [!WARNING]
+> Claude Code 2.1.325 was observed not writing this cache at all. On such versions, if the live request fails there is no fallback and the usage item stays hidden until the next successful refresh.
+
+To avoid network requests entirely, set `claudeContextMeter.usageLiveFetch` to `false`. Usage then comes from the local cache alone — accepting that it will often be out of date, or missing on Claude Code versions that no longer write it.
 
 > **Note:** this endpoint is undocumented. It may change or stop working at Anthropic's discretion, in which case the meter falls back to the cache rather than erroring.
 
@@ -114,21 +117,44 @@ Set `claudeContextMeter.dailyBudget` to a USD amount and you'll get a one-time w
 
 ## How it works
 
-Claude Code writes session logs as `.jsonl` files under `~/.claude/projects/`. This extension watches that directory with VS Code's file system watcher — no polling interval, no delay. The moment Claude writes a response, the meter updates.
+Claude Code writes session logs as `.jsonl` files under `~/.claude/projects/` (or `$CLAUDE_CONFIG_DIR/projects/` when that variable is set). This extension watches that directory with VS Code's file system watcher — no polling interval, no delay. The moment Claude writes a response, the meter updates.
 
 Token limit is auto-detected from the model name:
 
 | Model | Context |
-|---|---|
-| Claude Opus 5.5, Opus 5, Claude Fable 5 / Mythos 5, Opus 4.5/4.6/4.7/4.8, Sonnet 5, Sonnet 4.5/4.6/4.7, and any future Opus/Sonnet | 1M tokens |
-| All Haiku models (4.5, 3.5, 3) | 200k tokens |
-| Legacy Claude 3 / 3.5 Sonnet & Opus | 200k tokens |
+| :--- | :--- |
+| Fable 5.2 / 5.1 / 5 (and Mythos), Opus 5.5 / 5 / 4.8 / 4.7, Sonnet 5.5 / 5, Haiku 5.5, any future Claude model | 1M tokens |
+| Opus 4.6, Sonnet 4.6 | 200k tokens (1M with the `[1m]` suffix) |
+| Opus 4 / 4.1 / 4.5, Sonnet 4 / 4.5, Haiku 4.5 | 200k tokens |
+| Claude 3 / 3.5 / 3.7 (all families) | 200k tokens |
 
-New Claude releases default to 1M unless they are Haiku — no extension update required. Cost is priced per model tier and kept current as Anthropic ships new pricing.
+New versions of the Opus, Sonnet, Haiku and Fable families default to 1M — no extension update required. A session that grows past a 200k window is promoted to 1M automatically.
 
-Also works with Bedrock, Vertex AI, and Foundry-style model IDs (e.g. `anthropic.claude-opus-5-v1:0`, `claude-opus-4-5@20251101`) — pricing, context detection, and the tooltip's cleaned-up model name all handle the provider prefixes/suffixes.
+Model IDs that name no known family, such as a gateway alias like `claude-sonnet-latest` or a non-Claude model, use the `contextLimit` setting (default 200k, the window Claude Code assumes for them), or 1M when the ID ends in `[1m]`.
 
-Unrecognized non-Claude models fall back to the `contextLimit` setting.
+When VS Code was started from an environment that sets Claude Code's context variables, the meter follows the same rules as Claude Code:
+
+| Variable | Effect |
+| :--- | :--- |
+| `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` | Caps every model at 200k |
+| `CLAUDE_CODE_MAX_CONTEXT_TOKENS` | Sets the window for unrecognised IDs; for known models only when `DISABLE_COMPACT` is also set |
+
+The context figure counts input, cache-read and cache-write tokens, the same way Claude Code's own context percentage does; output tokens count toward cost only.
+
+Cost is priced per model:
+
+| Model | Input | Output | Cache read | Cache write 5m / 1h |
+| :--- | ---: | ---: | ---: | ---: |
+| Fable 5.2 / Mythos 5.2 | $8 | $40 | $0.20 | $10 / $16 |
+| Opus 5.5 | $4 | $20 | $0.20 | $5 / $8 |
+| Sonnet 5.5 | $2 | $10 | $0.10 | $2.50 / $4 |
+| Sonnet 5 | $2 | $10 | $0.20 | $2.50 / $4 |
+| Haiku 5.5 (prompt ≤ 100k) | $0.10 | $0.50 | $0.01 | $0.125 / $0.20 |
+| Haiku 5.5 (prompt > 100k) | $0.50 | $2.50 | $0.05 | $0.625 / $1 |
+
+Prices are USD per million tokens. Older models keep their own rates. Cache writes are split by TTL using the transcript's `cache_creation` breakdown (Claude Code writes 1-hour entries), and fast-mode turns are billed at 2x. Unrecognised models are priced as Opus 5.5.
+
+Also works with Bedrock, Vertex AI, gateway and Foundry-style model IDs (e.g. `global.anthropic.claude-fable-5-2`, `anthropic.claude-opus-5-v1:0`, `claude-opus-4-5@20251101`, `claude-opus-4.8`) — pricing, context detection, and the tooltip's cleaned-up model name all handle the provider prefixes/suffixes.
 
 ## Install
 
@@ -181,7 +207,7 @@ On Windows, `./scripts/install-local.ps1` does the build, install, registration 
 
 | Setting | Default | Description |
 |---|---|---|
-| `claudeContextMeter.contextLimit` | `200000` | Fallback token limit when model is not auto-detected |
+| `claudeContextMeter.contextLimit` | `200000` | Context window for unrecognised model IDs (gateway aliases, non-Claude models) |
 | `claudeContextMeter.idleTimeout` | `180` | Seconds of inactivity before hiding a session |
 | `claudeContextMeter.warningThreshold` | `50` | % at which the bar turns yellow |
 | `claudeContextMeter.dangerThreshold` | `75` | % at which the bar turns red |
@@ -190,7 +216,7 @@ On Windows, `./scripts/install-local.ps1` does the build, install, registration 
 | `claudeContextMeter.autoColor` | `true` | Auto-assign a unique pastel color per project |
 | `claudeContextMeter.shortNames` | `{}` | Custom name overrides e.g. `{ "my-project": "MP" }` |
 | `claudeContextMeter.dailyBudget` | `0` | Daily spend alert threshold in USD across all sessions (`0` = disabled) |
-| `claudeContextMeter.showUsage` | `true` | Show Claude subscription usage (session and weekly limits) |
+| `claudeContextMeter.showUsage` | `true` | Show Claude subscription usage (5-hour and weekly limits) |
 | `claudeContextMeter.usageWarningThreshold` | `50` | Subscription usage % at which the meter turns yellow |
 | `claudeContextMeter.usageDangerThreshold` | `75` | Subscription usage % at which the meter turns red |
 | `claudeContextMeter.usageStaleMinutes` | `30` | Minutes after which a cached usage reading is marked stale |

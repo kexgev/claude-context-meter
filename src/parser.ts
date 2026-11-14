@@ -44,7 +44,19 @@ function parseBreakdown(usage: Record<string, unknown>): TokenBreakdown {
   const output = n('output_tokens');
   const cacheRead = n('cache_read_input_tokens');
   const cacheWrite = n('cache_creation_input_tokens');
-  return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite };
+  const breakdown: TokenBreakdown = { input, output, cacheRead, cacheWrite, total: input + cacheRead + cacheWrite };
+
+  // Claude Code writes its prompt cache with the 1-hour TTL, which bills at 2x
+  // input rather than the 5-minute 1.25x. The split lives in `cache_creation`.
+  const creation = usage['cache_creation'];
+  if (creation && typeof creation === 'object') {
+    const oneHour = (creation as Record<string, unknown>)['ephemeral_1h_input_tokens'];
+    if (typeof oneHour === 'number' && oneHour > 0) {
+      breakdown.cacheWrite1h = Math.min(oneHour, cacheWrite);
+    }
+  }
+  if (usage['speed'] === 'fast') { breakdown.fast = true; }
+  return breakdown;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
@@ -72,7 +84,7 @@ export function parseLatestTokenUsage(lines: string[]): ParsedLatest | null {
     if (!usage) { continue; }
 
     const tokens = parseBreakdown(usage);
-    if (tokens.total === 0) { continue; } // skip zero-usage sentinel lines
+    if (tokens.total === 0 && tokens.output === 0) { continue; } // skip zero-usage sentinel lines
 
     const model = typeof msg['model'] === 'string' ? msg['model'] : '';
     return { tokens, model };

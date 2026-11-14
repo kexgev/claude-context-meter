@@ -23,29 +23,89 @@ const PALETTE = [
 
 // ── Exported helpers (also tested directly) ───────────────────────────────
 
-/**
- * Known Claude model context windows.
- * Patterns are tested against the lowercase model string.
- * First match wins — order from most specific to least.
- */
-const MODEL_CONTEXT_LIMITS: { pattern: RegExp; limit: number }[] = [
-  // Haiku family — always 200K (catches claude-haiku-*, claude-3-haiku, claude-3-5-haiku)
-  { pattern: /claude-(3[._-]5-|3-)?haiku/, limit: 200_000 },
-  // Legacy Claude 3 / 3.5 — never had 1M context
-  { pattern: /claude-3[._-]5-sonnet/,    limit:   200_000 },
-  { pattern: /claude-3-opus/,            limit:   200_000 },
-  { pattern: /claude-3-sonnet/,          limit:   200_000 },
-  // Catch-all for any other claude-* model (Opus/Sonnet 4.x and beyond) → 1M.
-  // Future-proofs new releases (Opus 4.8, 4.9, 5.x, etc.) without code changes.
-  { pattern: /claude-/,                  limit: 1_000_000 },
-];
+const CONTEXT_200K = 200_000;
+const CONTEXT_1M = 1_000_000;
 
-export function detectTokenLimit(model: string, contextLimit: number): number {
-  const lower = model.toLowerCase();
-  for (const { pattern, limit } of MODEL_CONTEXT_LIMITS) {
-    if (pattern.test(lower)) { return limit; }
+/** Claude Code's context env vars, when the VS Code extension host inherits them. */
+function contextEnv(): { disable1M: boolean; maxTokens: number | null; disableCompact: boolean } {
+  const truthy = (v: string | undefined) => !!v && !['0', 'false', 'no', 'off'].includes(v.toLowerCase());
+  const max = Number(process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS);
+  return {
+    disable1M: truthy(process.env.CLAUDE_CODE_DISABLE_1M_CONTEXT),
+    maxTokens: Number.isFinite(max) && max > 0 ? max : null,
+    disableCompact: truthy(process.env.DISABLE_COMPACT),
+  };
+}
+
+/**
+ * Native context window for a model ID Claude Code recognises, or null when it
+ * does not recognise the ID (gateway aliases such as "claude-sonnet-latest",
+ * non-Claude models, empty IDs).
+ *
+ * - Claude 3.x (any family) and Haiku 4.x: 200K.
+ * - Opus/Sonnet 4, 4.1, 4.5: 200K.
+ * - Opus/Sonnet 4.6: 200K unless the ID carries the `[1m]` suffix.
+ * - Opus 4.7+, Sonnet 5+, Haiku 5.5+, Fable/Mythos: 1M. Future versions of these
+ *   families are assumed 1M too, so new releases work without an update.
+ *
+ * Dotted versions ("claude-opus-4.6") are treated like dashed ones; dated
+ * suffixes ("-20250514") are never mistaken for a minor version.
+ */
+function knownContextLimit(model: string): number | null {
+  const id = model.toLowerCase().replace(/(\d)\.(\d)/g, '$1-$2');
+
+  // Old naming: claude-3-opus, claude-3-5-sonnet, claude-3-7-sonnet, claude-3-5-haiku
+  if (/claude-3(?:-\d)?-(?:opus|sonnet|haiku)/.test(id)) { return CONTEXT_200K; }
+
+  const m = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(id);
+  if (!m) { return null; }
+  const family = m[1];
+  const major = Number(m[2]);
+  const minor = m[3] === undefined ? 0 : Number(m[3]);
+
+  if (family === 'haiku') { return major < 5 ? CONTEXT_200K : CONTEXT_1M; }
+  if ((family === 'opus' || family === 'sonnet') && major === 4) {
+    if (minor < 6) { return CONTEXT_200K; }
+    if (minor === 6) { return id.includes('[1m]') ? CONTEXT_1M : CONTEXT_200K; }
+    return CONTEXT_1M;
   }
-  return contextLimit;
+  if ((family === 'opus' || family === 'sonnet') && major < 4) { return CONTEXT_200K; }
+  return CONTEXT_1M;
+}
+
+/**
+ * Context window for a session's model, following Claude Code's rules
+ * (https://code.claude.com/docs/en/model-config):
+ *
+ * - Recognised models use their native window. `CLAUDE_CODE_DISABLE_1M_CONTEXT`
+ *   caps them at 200K; `CLAUDE_CODE_MAX_CONTEXT_TOKENS` applies only together
+ *   with `DISABLE_COMPACT`.
+ * - Unrecognised IDs: 1M with a `[1m]` suffix (unless 1M is disabled), else
+ *   `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, else the `contextLimit` setting, which
+ *   defaults to the 200K Claude Code assumes.
+ */
+export function detectTokenLimit(model: string, contextLimit: number): number {
+  if (!model) { return contextLimit; }
+  const env = contextEnv();
+  const known = knownContextLimit(model);
+
+  if (known !== null) {
+    if (env.maxTokens !== null && env.disableCompact) { return env.maxTokens; }
+    return env.disable1M ? Math.min(known, CONTEXT_200K) : known;
+  }
+  if (/\[1m\]/i.test(model) && !env.disable1M) { return CONTEXT_1M; }
+  return env.maxTokens ?? contextLimit;
+}
+
+/**
+ * Whether a session that has outgrown its detected window can be assumed to be
+ * on the 1M variant: only when nothing in the environment or settings pinned
+ * the smaller window on purpose.
+ */
+export function canPromoteTo1M(model: string, tokenLimit: number): boolean {
+  if (!model || tokenLimit !== CONTEXT_200K) { return false; }
+  const env = contextEnv();
+  return !env.disable1M && env.maxTokens === null;
 }
 
 export function assignEmoji(projectName: string): string {
@@ -71,8 +131,8 @@ export function assignColor(projectPath: string, autoColor: boolean): string {
 /** Strip Bedrock/cross-region/Vertex decoration for display. Matching logic elsewhere (pricing, context limit) is untouched — this is display-only. */
 export function cleanModelName(model: string): string {
   return model
-    .replace(/^(us|eu|apac)\.anthropic\./, '')
-    .replace(/^anthropic\./, '')
+    .replace(/^(?:[a-z0-9-]+\.)?anthropic\./i, '')
+    .replace(/\[1m\]$/i, '')
     .replace(/-v\d+:\d+$/, '')
     .replace(/@\d{8}$/, '');
 }
@@ -173,7 +233,10 @@ export function walkRawSessions(
       const emptyBreakdown: TokenBreakdown = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
       const tokens = latest?.tokens ?? emptyBreakdown;
       const model = latest?.model ?? '';
-      const tokenLimit = detectTokenLimit(model, config.contextLimit);
+      let tokenLimit = detectTokenLimit(model, config.contextLimit);
+      // A session already past the detected window must be running the 1M
+      // variant (e.g. Opus 4.6 with [1m] that the transcript does not record).
+      if (tokens.total > tokenLimit && canPromoteTo1M(model, tokenLimit)) { tokenLimit = CONTEXT_1M; }
 
       rawSessions.push({ filePath, projectPath, projectName, id, mtime, tokens, model, tokenLimit, active });
     }

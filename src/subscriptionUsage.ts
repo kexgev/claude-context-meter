@@ -11,11 +11,12 @@ import * as path from 'path';
  * reads them: GET /api/oauth/usage, authenticated with the OAuth token Claude
  * Code stores locally.
  *
- * Claude Code also caches the last response in ~/.claude.json under
+ * Claude Code has cached the last response in ~/.claude.json under
  * `cachedUsageUtilization`, but it only refreshes that block occasionally — it
  * was measured sitting ~30 minutes stale while the file itself was rewritten
- * every few seconds. The cache is therefore only a fallback for when the live
- * request fails; trusting it alone produces confidently wrong numbers.
+ * every few seconds — and Claude Code 2.1.325 was seen not writing it at all.
+ * The cache is therefore only a best-effort fallback for when the live request
+ * fails; trusting it alone produces confidently wrong numbers.
  *
  * The endpoint is undocumented. It may change or stop working at Anthropic's
  * discretion, so every failure path degrades to the cache rather than erroring.
@@ -49,7 +50,7 @@ export interface UsageSnapshot {
 }
 
 const KIND_LABELS: Record<string, string> = {
-  session: 'Session',
+  session: '5-hour',
   weekly_all: 'Week (all models)',
   weekly_opus: 'Week (Opus)',
   weekly_sonnet: 'Week (Sonnet)',
@@ -75,7 +76,7 @@ function scopeName(scope: unknown): string | null {
 function labelFor(kind: string, scope?: string | null): string {
   if (scope) {
     if (kind.startsWith('weekly')) { return `Week (${scope})`; }
-    if (kind.startsWith('session')) { return `Session (${scope})`; }
+    if (kind.startsWith('session')) { return `5-hour (${scope})`; }
   }
   if (KIND_LABELS[kind] && !scope) { return KIND_LABELS[kind]; }
   const title = kind
@@ -96,6 +97,12 @@ function parseDate(value: unknown): Date | null {
 export function resolveClaudeConfigPath(): string {
   const dir = process.env.CLAUDE_CONFIG_DIR;
   return dir ? path.join(dir, '.claude.json') : path.join(os.homedir(), '.claude.json');
+}
+
+/** Claude Code's transcript directory. Honors CLAUDE_CONFIG_DIR like the paths above. */
+export function resolveProjectsDir(): string {
+  const dir = process.env.CLAUDE_CONFIG_DIR;
+  return dir ? path.join(dir, 'projects') : path.join(os.homedir(), '.claude', 'projects');
 }
 
 function resolveCredentialsPath(): string {

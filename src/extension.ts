@@ -1,13 +1,12 @@
 // src/extension.ts
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as os from 'os';
 import * as fs from 'fs';
 import { Config, SessionInfo } from './types';
 import { scanSessions, cleanModelName } from './sessionManager';
 import { StatusBarManager, calcCost, fmtCost, describePricing } from './statusBar';
 import { scanAllSessionsForSpend, filterByRange, summarize, SpendRange } from './spendSummary';
-import { resolveClaudeConfigPath, readCachedUsage, getUsageSnapshot, formatAge } from './subscriptionUsage';
+import { resolveClaudeConfigPath, resolveProjectsDir, readCachedUsage, getUsageSnapshot, formatAge } from './subscriptionUsage';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarMgr: StatusBarManager;
@@ -233,7 +232,7 @@ async function showSpendSummary(): Promise<void> {
   const range = RANGE_LABELS.find(r => r.label === picked)!.range;
 
   const config = getConfig();
-  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const projectsDir = resolveProjectsDir();
   const entries = filterByRange(
     scanAllSessionsForSpend(projectsDir, config, msg => outputChannel.appendLine(msg)),
     range,
@@ -270,7 +269,7 @@ async function checkBudget(): Promise<void> {
   const today = new Date().toDateString();
   if (lastBudgetAlertDate === today) { return; }
 
-  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const projectsDir = resolveProjectsDir();
   if (!fs.existsSync(projectsDir)) { return; }
 
   const entries = filterByRange(
@@ -297,7 +296,7 @@ async function checkBudget(): Promise<void> {
  */
 function showDiagnostics(context: vscode.ExtensionContext): void {
   const cfg = getConfig();
-  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const projectsDir = resolveProjectsDir();
   const sessions = statusBarMgr.getSessions();
 
   const lines: string[] = [
@@ -314,7 +313,7 @@ function showDiagnostics(context: vscode.ExtensionContext): void {
   ];
 
   for (const s of sessions) {
-    const { tier, rates } = describePricing(s.model);
+    const { tier, rates } = describePricing(s.model, s.tokens);
     lines.push(
       '',
       `  ${s.projectName}`,
@@ -322,9 +321,9 @@ function showDiagnostics(context: vscode.ExtensionContext): void {
       `    model (display) : ${cleanModelName(s.model) || '(none)'}`,
       `    context limit   : ${s.tokenLimit.toLocaleString()} tokens`,
       `    usage           : ${s.tokens.total.toLocaleString()} (${s.pct}%)`,
-      `    tokens          : in ${s.tokens.input.toLocaleString()} · out ${s.tokens.output.toLocaleString()} · cache-read ${s.tokens.cacheRead.toLocaleString()} · cache-write ${s.tokens.cacheWrite.toLocaleString()}`,
+      `    tokens          : in ${s.tokens.input.toLocaleString()} · out ${s.tokens.output.toLocaleString()} · cache-read ${s.tokens.cacheRead.toLocaleString()} · cache-write ${s.tokens.cacheWrite.toLocaleString()} (1h ${(s.tokens.cacheWrite1h ?? 0).toLocaleString()})${s.tokens.fast ? ' · fast mode' : ''}`,
       `    pricing tier    : ${tier}`,
-      `    rates /MTok     : in $${rates.input} · out $${rates.output} · cache-read $${rates.cacheRead} · cache-write $${rates.cacheWrite}`,
+      `    rates /MTok     : in $${rates.input} · out $${rates.output} · cache-read $${rates.cacheRead} · cache-write 5m $${rates.cacheWrite} · cache-write 1h $${rates.input * 2}`,
       `    cost            : $${calcCost(s.tokens, s.model).toFixed(2)}`,
       `    transcript      : ${s.filePath}`,
     );
@@ -461,7 +460,7 @@ async function showUsageNoticeIfNeeded(context: vscode.ExtensionContext): Promis
   } else if (action === 'Local data only') {
     await settings.update('usageLiveFetch', false, vscode.ConfigurationTarget.Global);
     void vscode.window.showInformationMessage(
-      "Usage will use Claude Code's local cache only. It refreshes infrequently, so the figures can lag well behind reality.",
+      "Usage will use Claude Code's local cache only. It refreshes infrequently, and recent Claude Code versions may not write it at all, so usage can be stale or missing.",
     );
   }
 }
@@ -504,10 +503,10 @@ function validateThresholds(): void {
 
 async function refresh(): Promise<void> {
   const config = getConfig();
-  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const projectsDir = resolveProjectsDir();
 
   if (!fs.existsSync(projectsDir)) {
-    outputChannel.appendLine('[info] ~/.claude/projects not found.');
+    outputChannel.appendLine(`[info] ${projectsDir} not found.`);
     statusBarMgr.update([]);
     sessionFilePaths.clear();
     return;
@@ -534,7 +533,7 @@ async function refresh(): Promise<void> {
 // ── File watcher ──────────────────────────────────────────────────────────
 
 function setupWatcher(context: vscode.ExtensionContext): void {
-  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  const projectsDir = resolveProjectsDir();
   try {
     const pattern = new vscode.RelativePattern(vscode.Uri.file(projectsDir), '**/*.jsonl');
     watcher = vscode.workspace.createFileSystemWatcher(pattern);

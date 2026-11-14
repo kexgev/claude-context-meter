@@ -1,8 +1,8 @@
 {
   "name": "claude-context-meter",
   "displayName": "Claude Code Usage Meter",
-  "description": "Live Claude Code usage in your status bar — subscription session and weekly limits, context window, cost, burn rate, spend summaries, and budget alerts. Supports Claude Opus 5, Sonnet 5, Fable 5, Haiku 4.5, and every future Claude model automatically.",
-  "version": "2.1.1",
+  "description": "Live Claude Code usage in your status bar — subscription 5-hour and weekly limits, context window, cost, burn rate, spend summaries, and budget alerts. Supports Claude Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, and every future Claude model automatically.",
+  "version": "2.1.2",
   "publisher": "kexgev",
   "keywords": [
     "claude",
@@ -30,6 +30,7 @@
     "sonnet",
     "haiku",
     "fable",
+    "mythos",
     "usage",
     "rate limit",
     "session limit",
@@ -66,7 +67,7 @@
           "default": 200000,
           "minimum": 1000,
           "maximum": 2000000,
-          "description": "Fallback token limit when model is not detected"
+          "description": "Context window for model IDs the extension does not recognise, such as gateway aliases and non-Claude models. Claude Code itself assumes 200K for these. Claude models are detected automatically."
         },
         "claudeContextMeter.idleTimeout": {
           "type": "number",
@@ -118,7 +119,7 @@
         "claudeContextMeter.showUsage": {
           "type": "boolean",
           "default": true,
-          "description": "Show Claude subscription usage (session and weekly limits) in the status bar"
+          "description": "Show Claude subscription usage (5-hour and weekly limits) in the status bar"
         },
         "claudeContextMeter.usageWarningThreshold": {
           "type": "number",
@@ -144,7 +145,7 @@
         "claudeContextMeter.usageLiveFetch": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Fetch current subscription usage from Anthropic using the OAuth token Claude Code stores locally. This is the same request Claude Code makes for its own `/usage` command, and the token is sent only to Anthropic. Turn this off to avoid all network requests; usage then falls back to Claude Code’s local cache, which can be badly out of date."
+          "markdownDescription": "Fetch current subscription usage from Anthropic using the OAuth token Claude Code stores locally. This is the same request Claude Code makes for its own `/usage` command, and the token is sent only to Anthropic. Turn this off to avoid all network requests; usage then falls back to Claude Code’s local cache, which can be badly out of date and which recent Claude Code versions may not write at all."
         },
         "claudeContextMeter.usageRefreshInterval": {
           "type": "number",

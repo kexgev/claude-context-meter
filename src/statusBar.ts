@@ -47,65 +47,118 @@ function statusEmoji(pct: number, warn: number, danger: number): string {
 
 export interface PricingRow { input: number; output: number; cacheRead: number; cacheWrite: number; }
 
-/** cacheRead = 10% of input, cacheWrite = 125% of input — the ratio every current Claude model uses. */
+/**
+ * cacheRead = 10% of input, cacheWrite = 125% of input (5-minute TTL).
+ * The 1-hour TTL write rate is always 2x input and is derived in calcCost.
+ */
 function rates(input: number, output: number): PricingRow {
-  return { input, output, cacheRead: input * 0.1, cacheWrite: input * 1.25 };
+  // Rounded so diagnostics print $0.3, not $0.30000000000000004.
+  const round = (n: number) => Math.round(n * 1e6) / 1e6;
+  return { input, output, cacheRead: round(input * 0.1), cacheWrite: round(input * 1.25) };
 }
 
+const FABLE_5_2: PricingRow = { input: 8.00, output: 40.00, cacheRead: 0.20, cacheWrite: 10.00 };
+const OPUS_5_5: PricingRow = { input: 4.00, output: 20.00, cacheRead: 0.20, cacheWrite: 5.00 };
+const SONNET_5_5: PricingRow = { input: 2.00, output: 10.00, cacheRead: 0.10, cacheWrite: 2.50 };
+const HAIKU_5_5: PricingRow = rates(0.10, 0.50);
+/** Haiku 5.5 bills every token of a request at this tier once the prompt exceeds 100K tokens. */
+const HAIKU_5_5_LONG: PricingRow = rates(0.50, 2.50);
+const HAIKU_5_5_LONG_THRESHOLD = 100_000;
+
+/**
+ * Matched against the normalised model ID (see normaliseModelId); a pattern
+ * must not be followed by another digit, so "claude-fable-5-2" never matches a
+ * dated "claude-fable-5-20260301" and "claude-opus-4-1" never matches
+ * "claude-opus-4-10". First match wins, so more specific IDs must precede the
+ * IDs they extend ("claude-fable-5-2" before "claude-fable-5").
+ */
 const PRICING: Array<{ pattern: string; rates: PricingRow }> = [
-  // Top tier. 5.1 cut cache reads to $0.25 (2.5% of input), so it precedes the 5 rows.
+  // Fable / Mythos (same model, two names)
+  { pattern: 'claude-fable-5-2',  rates: FABLE_5_2 },
+  { pattern: 'claude-mythos-5-2', rates: FABLE_5_2 },
   { pattern: 'claude-fable-5-1',  rates: { input: 10.00, output: 50.00, cacheRead: 0.25, cacheWrite: 12.50 } },
   { pattern: 'claude-mythos-5-1', rates: { input: 10.00, output: 50.00, cacheRead: 0.25, cacheWrite: 12.50 } },
   { pattern: 'claude-fable-5',    rates: rates(10.00, 50.00) },
   { pattern: 'claude-mythos-5',   rates: rates(10.00, 50.00) },
-  // Opus 5.5 — $4/$20, cache read cut to $0.20 (5% of input)
-  { pattern: 'claude-opus-5-5',   rates: { input: 4.00, output: 20.00, cacheRead: 0.20, cacheWrite: 5.00 } },
-  // Current-gen Opus (4.5 and up, incl. 5) — all $5/$25
+  // Opus
+  { pattern: 'claude-opus-5-5',   rates: OPUS_5_5 },
   { pattern: 'claude-opus-5',     rates: rates(5.00, 25.00) },
   { pattern: 'claude-opus-4-8',   rates: rates(5.00, 25.00) },
   { pattern: 'claude-opus-4-7',   rates: rates(5.00, 25.00) },
   { pattern: 'claude-opus-4-6',   rates: rates(5.00, 25.00) },
   { pattern: 'claude-opus-4-5',   rates: rates(5.00, 25.00) },
-  // Legacy Opus (4.0/4.1) — pre-price-cut $15/$75
+  // Legacy Opus (4.0/4.1, 3) — pre-price-cut $15/$75
   { pattern: 'claude-opus-4-1',   rates: rates(15.00, 75.00) },
   { pattern: 'claude-opus-4',     rates: rates(15.00, 75.00) },
-  // Sonnet — all current + recent gens are $3/$15
-  { pattern: 'claude-sonnet-5',   rates: rates(3.00, 15.00) },
+  { pattern: 'claude-3-opus',     rates: rates(15.00, 75.00) },
+  // Sonnet — 5.x cut to $2/$10; 5.5 also halved cache reads
+  { pattern: 'claude-sonnet-5-5', rates: SONNET_5_5 },
+  { pattern: 'claude-sonnet-5',   rates: rates(2.00, 10.00) },
   { pattern: 'claude-sonnet-4',   rates: rates(3.00, 15.00) },
+  { pattern: 'claude-3-7-sonnet', rates: rates(3.00, 15.00) },
+  { pattern: 'claude-3-5-sonnet', rates: rates(3.00, 15.00) },
+  { pattern: 'claude-3-sonnet',   rates: rates(3.00, 15.00) },
   // Haiku
+  { pattern: 'claude-haiku-5-5',  rates: HAIKU_5_5 },
   { pattern: 'claude-haiku-4-5',  rates: rates(1.00, 5.00) },
-  // Generic family fallbacks for future models not yet listed above.
-  // Opus/Haiku default to current-gen pricing (not legacy) — matches the
-  // trend of the last several releases and is the safer bet going forward.
-  { pattern: 'fable',             rates: rates(10.00, 50.00) },
-  { pattern: 'mythos',            rates: rates(10.00, 50.00) },
-  { pattern: 'opus',              rates: rates(5.00, 25.00) },
-  { pattern: 'sonnet',            rates: rates(3.00, 15.00) },
-  { pattern: 'haiku',             rates: rates(1.00, 5.00) },
+  { pattern: 'claude-3-5-haiku',  rates: rates(0.80, 4.00) },
+  { pattern: 'claude-3-haiku',    rates: rates(0.25, 1.25) },
+  // Generic family fallbacks for future models not yet listed above:
+  // priced as the current generation of each family.
+  { pattern: 'fable',             rates: FABLE_5_2 },
+  { pattern: 'mythos',            rates: FABLE_5_2 },
+  { pattern: 'opus',              rates: OPUS_5_5 },
+  { pattern: 'sonnet',            rates: SONNET_5_5 },
+  { pattern: 'haiku',             rates: HAIKU_5_5 },
 ];
-const PRICING_FALLBACK: PricingRow = rates(3.00, 15.00);
+const PRICING_MATCHERS = PRICING.map(p => ({ ...p, re: new RegExp(p.pattern.replace(/-/g, '\\-') + '(?!\\d)') }));
 
-/** Calculate USD cost for a token breakdown given a model string. Returns 0 if no tokens. */
-export function calcCost(tokens: TokenBreakdown, model: string): number {
-  const lower = model.toLowerCase();
-  const rates = PRICING.find(p => lower.includes(p.pattern))?.rates ?? PRICING_FALLBACK;
-  return (
-    tokens.input      * rates.input      +
-    tokens.output     * rates.output     +
-    tokens.cacheRead  * rates.cacheRead  +
-    tokens.cacheWrite * rates.cacheWrite
-  ) / 1_000_000;
+/** Unknown models are priced as Opus 5.5, Claude Code's default model on every plan. */
+const PRICING_FALLBACK: PricingRow = OPUS_5_5;
+
+/**
+ * Lowercase a model ID and turn dotted versions into the dashed form the
+ * pricing table uses, so gateway IDs like "claude-opus-4.8" are not mistaken
+ * for the legacy "claude-opus-4" row.
+ */
+export function normaliseModelId(model: string): string {
+  return model.toLowerCase().replace(/(\d)\.(\d)/g, '$1-$2');
 }
 
 /**
- * Resolve which pricing row a model string matches, and under what name.
- * Exported for the diagnostics command so users can see why a cost looks the way it does.
+ * Resolve the pricing row for a model, and the tier name it matched under.
+ * When tokens are given, request-dependent tiers apply: Haiku 5.5 long-prompt
+ * pricing and the 2x fast-mode premium.
  */
-export function describePricing(model: string): { tier: string; rates: PricingRow } {
-  const match = PRICING.find(p => model.toLowerCase().includes(p.pattern));
-  return match
-    ? { tier: match.pattern, rates: match.rates }
-    : { tier: 'fallback (model not recognized)', rates: PRICING_FALLBACK };
+export function describePricing(model: string, tokens?: TokenBreakdown): { tier: string; rates: PricingRow } {
+  const id = normaliseModelId(model);
+  const match = PRICING_MATCHERS.find(p => p.re.test(id));
+  let tier = match ? match.pattern : 'fallback (model not recognized, priced as Opus 5.5)';
+  let r = match ? match.rates : PRICING_FALLBACK;
+
+  if (tokens && r === HAIKU_5_5 && tokens.input + tokens.cacheRead + tokens.cacheWrite > HAIKU_5_5_LONG_THRESHOLD) {
+    r = HAIKU_5_5_LONG;
+    tier += ' (prompt > 100K)';
+  }
+  if (tokens?.fast) {
+    r = { input: r.input * 2, output: r.output * 2, cacheRead: r.cacheRead * 2, cacheWrite: r.cacheWrite * 2 };
+    tier += ' (fast mode)';
+  }
+  return { tier, rates: r };
+}
+
+/** Calculate USD cost for a token breakdown given a model string. Returns 0 if no tokens. */
+export function calcCost(tokens: TokenBreakdown, model: string): number {
+  const { rates: r } = describePricing(model, tokens);
+  const write1h = Math.min(tokens.cacheWrite1h ?? 0, tokens.cacheWrite);
+  const write5m = tokens.cacheWrite - write1h;
+  return (
+    tokens.input     * r.input      +
+    tokens.output    * r.output     +
+    tokens.cacheRead * r.cacheRead  +
+    write5m          * r.cacheWrite +
+    write1h          * r.input * 2
+  ) / 1_000_000;
 }
 
 /** Format a USD cost value for display. Returns empty string if cost === 0. */
@@ -479,7 +532,7 @@ export class StatusBarManager {
 
     const cost = calcCost(tokens, session.model);
     if (cost > 0) {
-      const rates = PRICING.find(p => session.model.toLowerCase().includes(p.pattern))?.rates ?? PRICING_FALLBACK;
+      const { rates } = describePricing(session.model, tokens);
       const inputCost = (tokens.input * rates.input) / 1_000_000;
       const outputCost = (tokens.output * rates.output) / 1_000_000;
       md.appendMarkdown(`💰 cost: $${cost.toFixed(2)}  (in: $${inputCost.toFixed(2)} · out: $${outputCost.toFixed(2)})\n\n`);
