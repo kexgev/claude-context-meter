@@ -2,11 +2,13 @@
 
 A VS Code extension that puts your Claude Code usage in the status bar: subscription 5-hour and weekly limits, context window fill, cost, and burn rate — updating live via file watcher, no polling.
 
-## What's new in 2.0.0
+## What's new in 2.1.2
 
-**Claude Context Meter is now Claude Code Usage Meter**, with a new logo. It started as a context-window meter; it now tracks subscription limits, cost, burn rate and spend too, so the name follows what it actually does. Same extension — it updates in place, and your settings and keybindings are untouched.
+**Current models, priced and sized correctly.** Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 are all supported, with their own prices and 1M context windows. Cost now accounts for 1-hour cache writes and fast mode. Context windows for older models match what Claude Code uses. See the [model table](#how-it-works-1) and the [changelog](CHANGELOG.md#212--2026-11-14).
 
-**Subscription usage** (added in 1.6.0) shows your Claude session (5-hour) and weekly limits in the status bar, matching what `/usage` reports in Claude Code:
+The context percentage now counts input and cache tokens only, matching Claude Code's own figure, and the session limit is labelled **5-hour**, as Claude Code now calls it.
+
+**Subscription usage** shows your Claude 5-hour and weekly limits in the status bar, matching what `/usage` reports in Claude Code:
 
 ```
 ⏱ Usage 45% · 6%w        🤖 my-project ███░░ 16% ~$1.20 🔥2.1k/m
@@ -17,10 +19,10 @@ Crossing a threshold raises a one-time notification, so a cap that stops your wo
 ## Status bar
 
 ```
-🤖 my-project ███░░ 156k/200k (78%) ~$1.20 🔥2.1k/m
+🤖 my-project ████░ 780k/1M (78%) ~$0.39 🔥2.1k/m
 ```
 
-The bar fills as your context fills. After the percentage it shows the running session **cost** (`~$1.20`) and the recent **burn rate** (`🔥2.1k/m` = ~2,100 tokens/min). Color changes automatically:
+The bar fills as your context fills. After the percentage it shows the running session **cost** (`~$0.39`) and the recent **burn rate** (`🔥2.1k/m` = ~2,100 tokens/min). Color changes automatically:
 - Default — under warning threshold
 - **Yellow** — above warning (default 50%)
 - **Red** — above danger threshold (default 75%)
@@ -39,18 +41,18 @@ Click a meter to open a quick menu for that session:
 ```
 my-project
 
-`claude-sonnet-4-6`  ·  🟡 warn · 78%
+`claude-opus-5-5`  ·  🟡 warn · 78%
 
 ████████████████░░░░  78%
-156,121 / 200,000 tokens
+780,002 / 1,000,000 tokens
 
 ───────────────────────────────────
-in: 140,000  ·  out: 16,000  ·  cr: 0  ·  cw: 121
+in: 2  ·  out: 4,000  ·  cr: 760,000  ·  cw: 20,000
 
 🔥 recent: ~2.1k/min  ·  avg: ~2.1k/min
-⏳ ~21 min to full
+⏳ ~105 min to full
 
-💰 cost: $1.20  (in: $0.42 · out: $0.24)
+💰 cost: $0.39  (in: $0.00 · out: $0.08)
 
 Updated 9:42:15 PM
 ```
@@ -172,7 +174,7 @@ Use this if you're on VSCodium, Cursor, or another build without Marketplace acc
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-2.0.1.vsix --force
+code --install-extension claude-context-meter-2.1.2.vsix --force
 ```
 
 > **Heads up:** VS Code *pins* extensions installed from a `.vsix`, which turns off
@@ -193,7 +195,7 @@ git clone https://github.com/kexgev/claude-context-meter.git
 cd claude-context-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-2.0.1.vsix --force
+code --install-extension claude-context-meter-2.1.2.vsix --force
 ```
 
 On Windows, `./scripts/install-local.ps1` does the build, install, registration check, and stale-folder cleanup in one step.
