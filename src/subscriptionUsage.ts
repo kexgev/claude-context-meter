@@ -18,8 +18,9 @@ import * as path from 'path';
  * The cache is therefore only a best-effort fallback for when the live request
  * fails; trusting it alone produces confidently wrong numbers.
  *
- * The endpoint is undocumented. It may change or stop working at Anthropic's
- * discretion, so every failure path degrades to the cache rather than erroring.
+ * The endpoint is undocumented and rate-limits frequent polling (HTTP 429). It
+ * may change or stop working at Anthropic's discretion, so every failure path
+ * degrades to the newest older reading rather than erroring.
  */
 
 const USAGE_HOST = 'api.anthropic.com';
@@ -47,6 +48,8 @@ export interface UsageSnapshot {
   source: UsageSource;
   /** Plan name as claude.ai shows it, e.g. "Max (5x)". Null when unknown. */
   plan: string | null;
+  /** Why the latest live refresh failed, when this is an older reading. */
+  liveError?: string;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -297,11 +300,43 @@ function accessTokenOf(oauth: Record<string, unknown> | null): string | null {
   return token;
 }
 
+/** Outcome of one request to the usage endpoint. */
+type FetchOutcome =
+  | { ok: true; utilization: Record<string, unknown>; snapshot: UsageSnapshot }
+  | { ok: false; reason: string; rateLimited?: boolean; retryAfterMs?: number | null };
+
+/**
+ * `Retry-After` as milliseconds: either delta-seconds or an HTTP date.
+ * Null when absent or unparseable.
+ */
+export function parseRetryAfter(value: unknown, now = Date.now()): number | null {
+  const v = Array.isArray(value) ? value[0] : value;
+  if (typeof v !== 'string' || !v.trim()) { return null; }
+  if (/^\d+$/.test(v.trim())) { return Number(v.trim()) * 1000; }
+  const date = Date.parse(v);
+  return Number.isNaN(date) ? null : Math.max(0, date - now);
+}
+
+const MIN_BACKOFF_MS = 5 * 60_000;
+const MAX_BACKOFF_MS = 60 * 60_000;
+
+/**
+ * How long to stop polling after a 429. Honors the server's Retry-After;
+ * otherwise doubles from five minutes (or two poll intervals) up to an hour.
+ */
+export function nextBackoffMs(previousMs: number | undefined, retryAfterMs: number | null, intervalMs: number): number {
+  if (retryAfterMs !== null && retryAfterMs > 0) {
+    return Math.min(MAX_BACKOFF_MS, Math.max(retryAfterMs, intervalMs));
+  }
+  const base = Math.max(MIN_BACKOFF_MS, intervalMs * 2);
+  return Math.min(MAX_BACKOFF_MS, previousMs ? Math.max(base, previousMs * 2) : base);
+}
+
 /**
  * Fetch current usage from the authenticated endpoint.
- * Resolves null on any failure so the caller can fall back to the cache.
+ * Never rejects: failures come back with a reason for the log and tooltip.
  */
-function fetchLiveUsage(token: string, log: (msg: string) => void): Promise<UsageSnapshot | null> {
+function fetchLiveUsage(token: string): Promise<FetchOutcome> {
   return new Promise(resolve => {
     const req = https.request(
       {
@@ -319,46 +354,222 @@ function fetchLiveUsage(token: string, log: (msg: string) => void): Promise<Usag
         let body = '';
         res.on('data', chunk => { body += chunk; });
         res.on('end', () => {
+          if (res.statusCode === 429) {
+            resolve({
+              ok: false,
+              reason: 'Usage endpoint rate-limited the request (HTTP 429)',
+              rateLimited: true,
+              retryAfterMs: parseRetryAfter(res.headers['retry-after']),
+            });
+            return;
+          }
           if (res.statusCode !== 200) {
             // Status only. The body is never logged in case it echoes request detail.
-            log(`[info] Usage endpoint returned ${res.statusCode}; falling back to cached value.`);
-            resolve(null);
+            const hint = res.statusCode === 401 || res.statusCode === 403
+              ? ' (sign-in rejected; run /login in Claude Code)'
+              : '';
+            resolve({ ok: false, reason: `Usage endpoint returned HTTP ${res.statusCode}${hint}` });
             return;
           }
           try {
             const json = JSON.parse(body) as Record<string, unknown>;
-            resolve(parseUtilization(json, Date.now(), 'live'));
+            const snapshot = parseUtilization(json, Date.now(), 'live');
+            resolve(snapshot
+              ? { ok: true, utilization: json, snapshot }
+              : { ok: false, reason: 'Usage endpoint returned no limits' });
           } catch {
-            log('[info] Usage endpoint returned unparseable data; falling back to cached value.');
-            resolve(null);
+            resolve({ ok: false, reason: 'Usage endpoint returned unparseable data' });
           }
         });
       },
     );
 
-    req.on('timeout', () => { req.destroy(); resolve(null); });
-    req.on('error', () => resolve(null)); // deliberately unlogged: errors can carry the URL
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({ ok: false, reason: `Usage request timed out after ${REQUEST_TIMEOUT_MS / 1000}s (network, proxy or firewall)` });
+    });
+    // Only the error code is reported: messages can carry the URL.
+    req.on('error', err => {
+      const code = (err as NodeJS.ErrnoException).code;
+      resolve({ ok: false, reason: `Usage request failed${code ? ` (${code})` : ''}: network, proxy or firewall` });
+    });
     req.end();
   });
 }
 
 /**
- * Preferred snapshot: live when available, otherwise the local cache.
- * `allowLive` lets users switch off all network access.
+ * State shared by every VS Code window through a small file in the
+ * extension's global storage, so N windows make one request per interval
+ * between them and all respect the same 429 backoff. It holds only usage
+ * percentages and timestamps, never the token.
  */
-export async function getUsageSnapshot(
-  configPath: string,
-  allowLive: boolean,
-  log: (msg: string) => void,
-): Promise<UsageSnapshot | null> {
-  const oauth = await readOAuthRecord();
-  lastPlan = planLabel(oauth?.['subscriptionType'], oauth?.['rateLimitTier']);
-  const token = allowLive ? accessTokenOf(oauth) : null;
-  if (token) {
-    const live = await fetchLiveUsage(token, log);
-    if (live) { live.plan = lastPlan; return live; }
+export interface SharedUsageState {
+  live?: { fetchedAtMs: number; utilization: Record<string, unknown> };
+  backoffUntilMs?: number;
+  backoffMs?: number;
+  /** Another window is mid-request until this time. */
+  inflightUntilMs?: number;
+}
+
+function readShared(file: string | null): SharedUsageState {
+  if (!file) { return {}; }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
+    return parsed && typeof parsed === 'object' ? (parsed as SharedUsageState) : {};
+  } catch {
+    return {};
   }
-  return readCachedUsage(configPath);
+}
+
+function writeShared(file: string | null, state: SharedUsageState): void {
+  if (!file) { return; }
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Write-then-rename so another window never reads a half-written file.
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(state), 'utf8');
+    fs.renameSync(tmp, file);
+  } catch {
+    // Sharing is an optimisation; each window still works on its own.
+  }
+}
+
+/** Newest candidate by fetch time, with age recomputed for `now`. Live wins ties. */
+export function newestSnapshot(
+  candidates: Array<UsageSnapshot | null | undefined>,
+  now = Date.now(),
+): UsageSnapshot | null {
+  let best: UsageSnapshot | null = null;
+  for (const c of candidates) {
+    if (!c) { continue; }
+    const t = c.fetchedAt.getTime();
+    const bt = best ? best.fetchedAt.getTime() : -Infinity;
+    if (t > bt || (t === bt && c.source === 'live' && best?.source !== 'live')) { best = c; }
+  }
+  return best ? { ...best, ageMs: Math.max(0, now - best.fetchedAt.getTime()) } : null;
+}
+
+const INFLIGHT_CLAIM_MS = REQUEST_TIMEOUT_MS + 5_000;
+/** Shared data younger than this share of the poll interval counts as fresh. */
+const SHARED_FRESH_RATIO = 0.8;
+
+/** "in 12 min" / "in 1h" for backoff messages. */
+function formatIn(ms: number): string {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  return minutes < 60 ? `in ${minutes} min` : `in ${Math.round(minutes / 60)}h`;
+}
+
+interface LiveAttempt {
+  snapshot?: UsageSnapshot;
+  sharedLive?: UsageSnapshot | null;
+  reason: string | null;
+}
+
+/**
+ * Polls the usage endpoint for one window. A fresh live reading is preferred;
+ * when that fails, the newest reading available (this window's last live one,
+ * another window's, or Claude Code's cache) is shown with its real age, so one
+ * failed poll never swaps minutes-old data for a day-old cache.
+ */
+export class UsagePoller {
+  private lastLive: UsageSnapshot | null = null;
+  private lastReason: string | null = null;
+
+  constructor(
+    private readonly sharedFile: string | null,
+    private readonly log: (msg: string) => void,
+  ) {}
+
+  /** `allowLive` false switches off all network access. */
+  async poll(configPath: string, allowLive: boolean, intervalMs: number): Promise<UsageSnapshot | null> {
+    const oauth = await readOAuthRecord();
+    lastPlan = planLabel(oauth?.['subscriptionType'], oauth?.['rateLimitTier']);
+
+    const attempt = await this.tryLive(oauth, allowLive, intervalMs);
+    if (attempt.snapshot) {
+      this.lastLive = attempt.snapshot;
+      this.report(null);
+      return { ...attempt.snapshot, plan: lastPlan, liveError: undefined };
+    }
+
+    this.report(attempt.reason);
+    const best = newestSnapshot([this.lastLive, attempt.sharedLive, readCachedUsage(configPath)]);
+    if (best) {
+      best.plan = lastPlan;
+      best.liveError = attempt.reason ?? undefined;
+    }
+    return best;
+  }
+
+  private async tryLive(
+    oauth: Record<string, unknown> | null,
+    allowLive: boolean,
+    intervalMs: number,
+  ): Promise<LiveAttempt> {
+    const now = Date.now();
+    const shared = readShared(this.sharedFile);
+    const sharedLive = shared.live && typeof shared.live.fetchedAtMs === 'number' && shared.live.utilization
+      ? parseUtilization(shared.live.utilization, shared.live.fetchedAtMs, 'live', now)
+      : null;
+
+    if (!allowLive) { return { sharedLive, reason: 'live fetch is turned off (usageLiveFetch)' }; }
+
+    // Another window fetched recently: reuse its reading instead of asking again.
+    if (sharedLive && now - sharedLive.fetchedAt.getTime() < intervalMs * SHARED_FRESH_RATIO) {
+      return { snapshot: sharedLive, reason: null };
+    }
+    if (shared.backoffUntilMs && now < shared.backoffUntilMs) {
+      return { sharedLive, reason: `rate-limited by the usage endpoint, next try ${formatIn(shared.backoffUntilMs - now)}` };
+    }
+    if (shared.inflightUntilMs && now < shared.inflightUntilMs) {
+      return { sharedLive, reason: this.lastReason }; // another window is asking right now
+    }
+
+    if (!oauth) { return { sharedLive, reason: 'no Claude Code sign-in found' }; }
+    const token = accessTokenOf(oauth);
+    if (!token) {
+      return {
+        sharedLive,
+        reason: "Claude Code's sign-in token has expired; it renews the next time Claude Code sends a message",
+      };
+    }
+
+    writeShared(this.sharedFile, { ...shared, inflightUntilMs: now + INFLIGHT_CLAIM_MS });
+    const result = await fetchLiveUsage(token);
+    const latest = readShared(this.sharedFile);
+
+    if (result.ok) {
+      writeShared(this.sharedFile, {
+        live: { fetchedAtMs: result.snapshot.fetchedAt.getTime(), utilization: result.utilization },
+      });
+      return { snapshot: result.snapshot, reason: null };
+    }
+
+    if (result.rateLimited) {
+      const backoffMs = nextBackoffMs(latest.backoffMs, result.retryAfterMs ?? null, intervalMs);
+      writeShared(this.sharedFile, {
+        ...latest,
+        inflightUntilMs: undefined,
+        backoffMs,
+        backoffUntilMs: Date.now() + backoffMs,
+      });
+      return { sharedLive, reason: `${result.reason}, next try ${formatIn(backoffMs)}` };
+    }
+
+    writeShared(this.sharedFile, { ...latest, inflightUntilMs: undefined });
+    return { sharedLive, reason: result.reason };
+  }
+
+  /** Log only when the failure reason changes, so a minute-by-minute poll does not flood the channel. */
+  private report(reason: string | null): void {
+    if (reason === this.lastReason) { return; }
+    if (reason) {
+      this.log(`[info] Live usage unavailable: ${reason}. Showing the newest reading available.`);
+    } else if (this.lastReason) {
+      this.log('[info] Live usage refresh is working again.');
+    }
+    this.lastReason = reason;
+  }
 }
 
 /** Highest-percentage limit within a group, or null when the group is absent. */

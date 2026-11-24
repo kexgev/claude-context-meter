@@ -6,7 +6,7 @@ import { Config, SessionInfo } from './types';
 import { scanSessions, cleanModelName } from './sessionManager';
 import { StatusBarManager, calcCost, fmtCost, describePricing } from './statusBar';
 import { scanAllSessionsForSpend, filterByRange, summarize, SpendRange } from './spendSummary';
-import { resolveClaudeConfigPath, resolveProjectsDir, readCachedUsage, getUsageSnapshot, formatAge } from './subscriptionUsage';
+import { resolveClaudeConfigPath, resolveProjectsDir, readCachedUsage, UsagePoller, formatAge } from './subscriptionUsage';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarMgr: StatusBarManager;
@@ -21,6 +21,7 @@ const BUDGET_CHECK_INTERVAL_MS = 60_000;
 
 let budgetCheckTimer: ReturnType<typeof setInterval> | undefined;
 let usageTimer: ReturnType<typeof setInterval> | undefined;
+let usagePoller: UsagePoller | undefined;
 let lastBudgetAlertDate: string | undefined;
 
 /**
@@ -39,6 +40,11 @@ function scheduleRefresh(): void {
 
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel('Claude Code Usage Meter');
+  // Global storage is shared by every window, so they can share one poll.
+  usagePoller = new UsagePoller(
+    path.join(context.globalStorageUri.fsPath, 'usage-shared.json'),
+    msg => outputChannel.appendLine(msg),
+  );
 
   statusBarMgr = new StatusBarManager(
     () => getConfig(),
@@ -373,9 +379,9 @@ async function showWhatsNewIfUpdated(context: vscode.ExtensionContext): Promise<
 // ── Subscription usage ─────────────────────────
 
 /**
- * Re-read Claude Code's local usage cache and push it to the status bar.
- * A null result (missing file, mid-write, or no subscription) leaves the last
- * good snapshot on screen rather than making the item disappear.
+ * Poll subscription usage and push it to the status bar. A null result
+ * (no reading anywhere) leaves the last good snapshot on screen rather than
+ * making the item disappear.
  */
 async function refreshUsage(): Promise<void> {
   const cfg = getConfig();
@@ -385,10 +391,11 @@ async function refreshUsage(): Promise<void> {
     statusBarMgr.updateUsage(null);
     return;
   }
-  const snapshot = await getUsageSnapshot(
+  if (!usagePoller) { return; }
+  const snapshot = await usagePoller.poll(
     resolveClaudeConfigPath(),
     cfg.usageLiveFetch,
-    msg => outputChannel.appendLine(msg),
+    Math.max(15, cfg.usageRefreshInterval) * 1000,
   );
   statusBarMgr.updateUsage(snapshot);
 }
@@ -400,8 +407,11 @@ async function refreshUsage(): Promise<void> {
  */
 function refreshUsageFromCache(): void {
   if (!getConfig().showUsage) { return; }
-  if (statusBarMgr.getUsage()?.source === 'live') { return; } // never downgrade live data
-  statusBarMgr.updateUsage(readCachedUsage(resolveClaudeConfigPath()));
+  const current = statusBarMgr.getUsage();
+  if (current?.source === 'live') { return; } // never downgrade live data
+  const cached = readCachedUsage(resolveClaudeConfigPath());
+  if (cached && current) { cached.liveError = current.liveError; }
+  statusBarMgr.updateUsage(cached);
 }
 
 /** Click handler for the subscription meter: list every reported limit. */
@@ -415,7 +425,8 @@ async function showUsageDetail(): Promise<void> {
   }
 
   const cfg = getConfig();
-  const stale = usage.ageMs > cfg.usageStaleMinutes * 60_000;
+  const ageMs = Date.now() - usage.fetchedAt.getTime();
+  const stale = ageMs > cfg.usageStaleMinutes * 60_000;
 
   const items: vscode.QuickPickItem[] = usage.limits.map(limit => {
     const reset = limit.resetsAt
@@ -428,8 +439,8 @@ async function showUsageDetail(): Promise<void> {
   });
 
   await vscode.window.showQuickPick(items, {
-    title: `Claude subscription${usage.plan ? ` · ${usage.plan}` : ''} — updated ${formatAge(usage.ageMs)}${stale ? ' (stale)' : ''}`,
-    placeHolder: stale ? 'Start Claude Code to refresh these numbers' : 'Subscription limits',
+    title: `Claude subscription${usage.plan ? ` · ${usage.plan}` : ''} — updated ${formatAge(ageMs)}${stale ? ' (stale)' : ''}`,
+    placeHolder: usage.liveError ? `Live refresh failing: ${usage.liveError}` : stale ? 'Start Claude Code to refresh these numbers' : 'Subscription limits',
   });
 }
 

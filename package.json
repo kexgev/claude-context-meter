@@ -2,7 +2,7 @@
   "name": "claude-context-meter",
   "displayName": "Claude Code Usage Meter",
   "description": "Live Claude Code usage in your status bar — subscription 5-hour and weekly limits, context window, cost, burn rate, spend summaries, and budget alerts. Supports Claude Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, and every future Claude model automatically.",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "publisher": "kexgev",
   "keywords": [
     "claude",
@@ -140,7 +140,7 @@
           "default": 30,
           "minimum": 1,
           "maximum": 1440,
-          "description": "Minutes after which the cached usage reading is marked stale"
+          "description": "Minutes after which a usage reading (live or cached) is marked stale"
         },
         "claudeContextMeter.usageLiveFetch": {
           "type": "boolean",

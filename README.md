@@ -2,7 +2,11 @@
 
 A VS Code extension that puts your Claude Code usage in the status bar: subscription 5-hour and weekly limits, context window fill, cost, and burn rate — updating live via file watcher, no polling.
 
-## What's new in 2.1.2
+## What's new in 2.1.3
+
+**The usage meter stays current.** A single failed refresh no longer drops the meter back to a day-old cached reading: it keeps the newest reading it has and shows its real age. Rate-limited requests (HTTP 429) back off instead of retrying every minute, all open VS Code windows share one request, and the tooltip says why a live refresh is failing. See the [changelog](CHANGELOG.md#213--2026-11-24).
+
+### 2.1.2
 
 **Current models, priced and sized correctly.** Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5 are all supported, with their own prices and 1M context windows. Cost now accounts for 1-hour cache writes and fast mode. Context windows for older models match what Claude Code uses. See the [model table](#how-it-works-1) and the [changelog](CHANGELOG.md#212--2026-11-14).
 
@@ -87,16 +91,16 @@ Resets Aug 24, 3:59pm
 Updated 2 min ago
 ```
 
-Crossing a threshold raises a one-time notification per limit, so a cap that stops your work doesn't arrive unannounced. Each limit alerts at most once per window and re-arms when that window resets. Alerts only fire on live readings — a stale cached figure never triggers one.
+Crossing a threshold raises a one-time notification per limit, so a cap that stops your work doesn't arrive unannounced. Each limit alerts at most once per window and re-arms when that window resets. Alerts only fire on fresh live readings — a stale figure never triggers one.
 
 ### How it works
 
-Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`; on macOS, where Claude Code keeps it in the login Keychain, the `Claude Code-credentials` Keychain item — macOS may ask once to allow access). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. The plan name comes from two non-secret fields in the same record (`subscriptionType`, `rateLimitTier`). Refreshes every `usageRefreshInterval` seconds (default 60).
+Usage is read from `GET /api/oauth/usage` — the same request Claude Code makes for its own `/usage` command — authenticated with the sign-in token Claude Code already stores on this machine (`~/.claude/.credentials.json`; on macOS, where Claude Code keeps it in the login Keychain, the `Claude Code-credentials` Keychain item — macOS may ask once to allow access). The token is used only as that request's `Authorization` header, is sent only to Anthropic, and is never stored or logged by the extension. The plan name comes from two non-secret fields in the same record (`subscriptionType`, `rateLimitTier`). Refreshes every `usageRefreshInterval` seconds (default 60). All open VS Code windows share one request per interval through a small file in the extension's global storage (usage percentages and timestamps only, never the token). If the endpoint answers HTTP 429, polling pauses for its `Retry-After`, or 5 minutes doubling up to an hour.
 
-Claude Code has cached its last usage response in `~/.claude.json`, and that cache is used as a fallback whenever the request fails — offline, rate-limited, expired token, or the endpoint changing. **The cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%. So cached readings are labelled as cached, and flagged with `⚠` once older than `usageStaleMinutes`, rather than being presented as current.
+When a refresh fails — offline, rate-limited, expired token, proxy or firewall, or the endpoint changing — the meter keeps the newest reading it has: the last live one, or Claude Code's own cache in `~/.claude.json`. **That cache refreshes rarely**: it has been observed sitting over 30 minutes stale, reporting 45% while actual usage was 85%, and newer Claude Code versions may not write it at all. So every reading shows its real age, is flagged with `⚠` once older than `usageStaleMinutes`, and the tooltip and the **Claude Code Usage Meter** output channel say why the live refresh is failing.
 
 > [!WARNING]
-> Claude Code 2.1.325 was observed not writing this cache at all. On such versions, if the live request fails there is no fallback and the usage item stays hidden until the next successful refresh.
+> Claude Code 2.1.325 was observed not writing this cache at all. On such versions the meter can only keep its last live reading (marked stale as it ages); if no live request has succeeded yet, the usage item stays hidden until one does.
 
 To avoid network requests entirely, set `claudeContextMeter.usageLiveFetch` to `false`. Usage then comes from the local cache alone — accepting that it will often be out of date, or missing on Claude Code versions that no longer write it.
 
@@ -174,7 +178,7 @@ Use this if you're on VSCodium, Cursor, or another build without Marketplace acc
 
 Or via terminal:
 ```bash
-code --install-extension claude-context-meter-2.1.2.vsix --force
+code --install-extension claude-context-meter-2.1.3.vsix --force
 ```
 
 > **Heads up:** VS Code *pins* extensions installed from a `.vsix`, which turns off
@@ -195,7 +199,7 @@ git clone https://github.com/kexgev/claude-context-meter.git
 cd claude-context-meter
 npm install
 npx vsce package --allow-missing-repository
-code --install-extension claude-context-meter-2.1.2.vsix --force
+code --install-extension claude-context-meter-2.1.3.vsix --force
 ```
 
 On Windows, `./scripts/install-local.ps1` does the build, install, registration check, and stale-folder cleanup in one step.
@@ -221,7 +225,7 @@ On Windows, `./scripts/install-local.ps1` does the build, install, registration 
 | `claudeContextMeter.showUsage` | `true` | Show Claude subscription usage (5-hour and weekly limits) |
 | `claudeContextMeter.usageWarningThreshold` | `50` | Subscription usage % at which the meter turns yellow |
 | `claudeContextMeter.usageDangerThreshold` | `75` | Subscription usage % at which the meter turns red |
-| `claudeContextMeter.usageStaleMinutes` | `30` | Minutes after which a cached usage reading is marked stale |
+| `claudeContextMeter.usageStaleMinutes` | `30` | Minutes after which a usage reading (live or cached) is marked stale |
 | `claudeContextMeter.usageLiveFetch` | `true` | Fetch current usage from Anthropic. `false` uses the local cache only, with no network requests |
 | `claudeContextMeter.usageRefreshInterval` | `60` | Seconds between usage refreshes |
 

@@ -234,12 +234,18 @@ function buildUsageTooltip(usage: UsageSnapshot, cfg: Config, stale: boolean): v
   }
 
   md.appendMarkdown('---\n\n');
+  const age = formatAge(usage.ageMs);
   if (usage.source === 'live') {
-    md.appendMarkdown(`*Updated ${formatAge(usage.ageMs)}*`);
+    md.appendMarkdown(stale
+      ? `⚠ Last live update ${age} — may be well behind actual usage`
+      : `*Updated ${age}*`);
   } else if (stale) {
-    md.appendMarkdown(`⚠ Cached, ${formatAge(usage.ageMs)} — may be well behind actual usage`);
+    md.appendMarkdown(`⚠ Cached, ${age} — may be well behind actual usage`);
   } else {
-    md.appendMarkdown(`*Cached, ${formatAge(usage.ageMs)}*`);
+    md.appendMarkdown(`*Cached, ${age}*`);
+  }
+  if (usage.liveError) {
+    md.appendMarkdown(`\n\n*Live refresh failing: ${escapeMd(usage.liveError)}*`);
   }
   return md;
 }
@@ -432,6 +438,8 @@ export class StatusBarManager {
     const cfg = this.getConfig();
     if (snapshot) { this.lastUsage = snapshot; }
     const usage = this.lastUsage;
+    // Age is measured at render time: a kept reading keeps getting older.
+    if (usage) { usage.ageMs = Math.max(0, Date.now() - usage.fetchedAt.getTime()); }
 
     if (!cfg.showUsage || !usage) {
       this.usageItem?.dispose();
@@ -451,7 +459,7 @@ export class StatusBarManager {
       weekly ? `${Math.round(weekly.percent)}%w` : '',
     ].filter(Boolean);
 
-    const stale = usage.source === 'cache' && usage.ageMs > cfg.usageStaleMinutes * 60_000;
+    const stale = usage.ageMs > cfg.usageStaleMinutes * 60_000;
     this.usageItem.text = `$(dashboard) Usage ${parts.join(' · ')}${stale ? ' ⚠' : ''}`;
     this.usageItem.tooltip = buildUsageTooltip(usage, cfg, stale);
 
@@ -467,7 +475,7 @@ export class StatusBarManager {
     }
 
     this.usageItem.show();
-    this.notifyUsage(usage, cfg);
+    if (!stale) { this.notifyUsage(usage, cfg); } // never alert on an old number
   }
 
   /**

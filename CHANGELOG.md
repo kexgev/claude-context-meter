@@ -5,6 +5,26 @@ All notable changes to **Claude Code Usage Meter** are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.3] — 2026-11-24
+
+### Fixed
+- **Usage meter no longer drops to a day-old cached reading.** One failed
+  live poll used to replace minutes-old live numbers with Claude Code's
+  `cachedUsageUtilization`, which newer Claude Code versions rarely refresh,
+  so the meter showed "Cached, 1d ago". Now the newest reading available is
+  kept and its real age shown.
+- **HTTP 429 backoff.** A rate-limited poll pauses for the server's
+  `Retry-After`, or 5 min doubling up to 1 hour, instead of retrying every
+  minute and staying rate-limited.
+- **One poll shared across VS Code windows.** Windows share the latest reading
+  and the backoff through the extension's global storage, so several open
+  windows no longer multiply requests on the same account.
+- **Live failures are explained.** An expired sign-in token, network, proxy
+  or firewall errors, timeouts and HTTP errors are logged once per change in
+  the "Claude Code Usage Meter" output channel and shown in the tooltip.
+- A live reading older than `usageStaleMinutes` is now marked stale too, and
+  stale readings no longer trigger limit alerts.
+
 ## [2.1.2] — 2026-11-14
 
 ### Added
